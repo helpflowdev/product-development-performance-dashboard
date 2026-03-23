@@ -1,5 +1,6 @@
 import { SprintRow } from '@/types/sprint';
 import { SprintCompletionStat, CompletionRateSummary } from '@/types/completion-rate';
+import { AssigneeCompletionStat, AssigneeSprintStat } from '@/types/individual-cr';
 import { getUniqueSprints } from './burndown-engine';
 
 /**
@@ -149,4 +150,137 @@ export function getCurrentYear(rows: SprintRow[]): string {
   }
 
   return maxYear || new Date().getFullYear().toString();
+}
+
+/**
+ * Filter rows to those matching any of the given roles (OR logic).
+ * Empty array → return all rows (no filter).
+ * Empty string '' matches blank/missing role.
+ */
+export function filterByRoles(rows: SprintRow[], roles: string[]): SprintRow[] {
+  if (roles.length === 0) return rows;
+  const roleSet = new Set(roles);
+  return rows.filter((row) => {
+    const rowRole = row.role && row.role.trim() ? row.role.trim() : '';
+    return roleSet.has(rowRole);
+  });
+}
+
+/**
+ * Extract unique role values from rows, sorted alphabetically.
+ * Blank/missing roles returned as '' (displayed as "(Blank)" in UI).
+ */
+export function getUniqueRoles(rows: SprintRow[]): string[] {
+  const roles = new Set<string>();
+  for (const row of rows) {
+    const role = row.role && row.role.trim() ? row.role.trim() : '';
+    roles.add(role);
+  }
+  return Array.from(roles).sort();
+}
+
+/**
+ * Compute per-assignee completion stats, optionally broken down per sprint.
+ * Returns one AssigneeCompletionStat per unique assignee, sorted alphabetically by assigneeName.
+ * bySprint is populated only when selectedSprintIds.length > 1.
+ */
+export function computeIndividualStats(
+  rows: SprintRow[],
+  selectedSprintIds: string[]
+): AssigneeCompletionStat[] {
+  if (rows.length === 0) return [];
+
+  // Group rows by assignee
+  const byAssignee = new Map<string, SprintRow[]>();
+  for (const row of rows) {
+    if (!row.assigneeName || !row.assigneeName.trim()) {
+      continue; // skip rows without assignee
+    }
+    const name = row.assigneeName.trim();
+    if (!byAssignee.has(name)) {
+      byAssignee.set(name, []);
+    }
+    byAssignee.get(name)!.push(row);
+  }
+
+  const results: AssigneeCompletionStat[] = [];
+
+  for (const [assigneeName, assigneeRows] of byAssignee.entries()) {
+    // Compute aggregate stats
+    const total = assigneeRows.length;
+    const completed = assigneeRows.filter(isCompleted).length;
+    const completionRate = total > 0 ? (completed / total) * 100 : 0;
+
+    // Determine role: most common non-blank role in this assignee's rows
+    const roleMap = new Map<string, number>();
+    for (const row of assigneeRows) {
+      const role = row.role && row.role.trim() ? row.role.trim() : '';
+      if (role) {
+        // Only count non-blank roles for frequency
+        roleMap.set(role, (roleMap.get(role) || 0) + 1);
+      }
+    }
+    let primaryRole = '';
+    let maxCount = 0;
+    for (const [role, count] of roleMap.entries()) {
+      if (count > maxCount) {
+        maxCount = count;
+        primaryRole = role;
+      }
+    }
+
+    // Compute per-sprint stats if multiple sprints selected
+    let bySprint: AssigneeSprintStat[] = [];
+    if (selectedSprintIds.length > 1) {
+      const bySprintMap = new Map<string, { total: number; completed: number }>();
+
+      for (const row of assigneeRows) {
+        const sprintId = row.sprint;
+        if (!bySprintMap.has(sprintId)) {
+          bySprintMap.set(sprintId, { total: 0, completed: 0 });
+        }
+        const stat = bySprintMap.get(sprintId)!;
+        stat.total += 1;
+        if (isCompleted(row)) {
+          stat.completed += 1;
+        }
+      }
+
+      // Convert to AssigneeSprintStat array, ordered by selectedSprintIds
+      const sprintOrder = new Map(selectedSprintIds.map((id, idx) => [id, idx]));
+      const sprintStats: AssigneeSprintStat[] = [];
+      for (const [sprintId, stat] of bySprintMap.entries()) {
+        const rate = stat.total > 0 ? (stat.completed / stat.total) * 100 : 0;
+        sprintStats.push({
+          sprintId,
+          total: stat.total,
+          completed: stat.completed,
+          completionRate: Math.round(rate * 100) / 100,
+        });
+      }
+
+      // Sort by selected sprint order
+      sprintStats.sort((a, b) => {
+        const orderA = sprintOrder.get(a.sprintId) ?? Infinity;
+        const orderB = sprintOrder.get(b.sprintId) ?? Infinity;
+        return orderA - orderB;
+      });
+
+      bySprint = sprintStats;
+    }
+
+    results.push({
+      assigneeName,
+      role: primaryRole,
+      total,
+      completed,
+      completionRate: Math.round(completionRate * 100) / 100,
+      bySprint,
+    });
+  }
+
+  // Sort alphabetically by assignee name
+  results.sort((a, b) => a.assigneeName.localeCompare(b.assigneeName));
+
+  return results;
 }

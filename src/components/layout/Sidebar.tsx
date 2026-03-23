@@ -12,6 +12,7 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { label: 'Burndown Chart', href: '/burndown', icon: '📊' },
   { label: 'Sprint Completion Rate', href: '/completion-rate', icon: '✅' },
+  { label: 'Individual Completion Rate', href: '/individual-cr', icon: '👤' },
   // Future sections
   // { label: 'Team Capacity', href: '/capacity', icon: '👥' },
   // { label: 'Velocity Trends', href: '/velocity', icon: '📈' },
