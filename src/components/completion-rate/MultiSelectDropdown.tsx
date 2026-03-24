@@ -65,16 +65,16 @@ export function MultiSelectDropdown({
 
   return (
     <div ref={dropdownRef} className="relative">
-      <label className="block text-sm font-medium text-gray-700 mb-2">{label}</label>
+      <label className="block text-sm font-medium text-slate-300 mb-2">{label}</label>
 
       <button
         onClick={() => setIsOpen(!isOpen)}
         disabled={disabled}
-        className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-left flex justify-between items-center focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed hover:border-gray-400 transition-colors"
+        className="glass-input w-full px-3 py-2 rounded-md text-left flex justify-between items-center disabled:opacity-50 disabled:cursor-not-allowed transition-all border border-white/20 hover:border-white/40 cursor-pointer"
       >
-        <span className="text-gray-700">{displayLabel}</span>
+        <span className="text-slate-100 font-medium">{displayLabel}</span>
         <svg
-          className={`w-4 h-4 text-gray-600 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+          className={`w-4 h-4 text-slate-300 transition-transform ${isOpen ? 'rotate-180' : ''}`}
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -84,18 +84,18 @@ export function MultiSelectDropdown({
       </button>
 
       {isOpen && (
-        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg">
+        <div className="absolute z-50 w-full mt-1 glass-card rounded-lg border border-white/30 shadow-2xl">
           {/* Action buttons */}
-          <div className="px-3 py-2 border-b border-gray-200 flex gap-2">
+          <div className="px-3 py-2 border-b border-white/10 flex gap-2">
             <button
               onClick={handleSelectAll}
-              className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors font-medium"
+              className="text-xs px-2 py-1 bg-purple-500/30 text-purple-200 border border-purple-500/50 rounded hover:bg-purple-500/50 hover:border-purple-500/70 transition-all font-bold cursor-pointer"
             >
               Select All
             </button>
             <button
               onClick={handleClearAll}
-              className="text-xs px-2 py-1 bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors font-medium"
+              className="text-xs px-2 py-1 bg-white/15 text-slate-200 border border-white/30 rounded hover:bg-white/25 hover:border-white/50 transition-all font-bold cursor-pointer"
             >
               Clear
             </button>
@@ -104,20 +104,20 @@ export function MultiSelectDropdown({
           {/* Options list */}
           <div className="max-h-64 overflow-y-auto">
             {options.length === 0 ? (
-              <div className="px-3 py-4 text-sm text-gray-500 text-center">No options available</div>
+              <div className="px-3 py-4 text-sm text-slate-300 text-center">No options available</div>
             ) : (
               options.map((option) => (
                 <label
                   key={option.value}
-                  className="flex items-center px-3 py-2 hover:bg-gray-50 cursor-pointer transition-colors"
+                  className="flex items-center px-3 py-2 hover:bg-white/15 cursor-pointer transition-all border-b border-white/5 last:border-b-0"
                 >
                   <input
                     type="checkbox"
                     checked={selected.includes(option.value)}
                     onChange={() => handleToggle(option.value)}
-                    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
+                    className="w-4 h-4 accent-cyan-400 rounded cursor-pointer"
                   />
-                  <span className="ml-3 text-sm text-gray-700">{option.label}</span>
+                  <span className="ml-3 text-sm text-slate-100 font-medium">{option.label}</span>
                 </label>
               ))
             )}

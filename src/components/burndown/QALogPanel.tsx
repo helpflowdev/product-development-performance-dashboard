@@ -14,8 +14,8 @@ export function QALogPanel({ flags }: QALogPanelProps) {
 
   if (flags.length === 0) {
     return (
-      <div className="mt-6 bg-green-50 border border-green-200 rounded-lg p-4">
-        <p className="text-green-800 font-medium">✓ No data issues found</p>
+      <div className="mt-6 bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-4">
+        <p className="text-emerald-400 font-medium">✓ No data issues found</p>
       </div>
     );
   }
@@ -30,7 +30,7 @@ export function QALogPanel({ flags }: QALogPanelProps) {
   );
 
   return (
-    <div className="mt-6 border border-gray-200 rounded-lg p-4">
+    <div className="mt-6 glass-card border border-white/20 rounded-lg p-4">
       <div className="flex gap-4 mb-4">
         {errorCount > 0 && <Badge label={`${errorCount} Errors`} variant="error" />}
         {warningCount > 0 && <Badge label={`${warningCount} Warnings`} variant="warning" />}
@@ -39,11 +39,11 @@ export function QALogPanel({ flags }: QALogPanelProps) {
 
       <div className="space-y-3">
         {flagsByType['complete_missing_date'] && (
-          <details className="border-b pb-3">
-            <summary className="cursor-pointer font-semibold text-red-700">
+          <details className="border-b border-white/10 pb-3">
+            <summary className="cursor-pointer font-semibold text-rose-400 hover:text-rose-300">
               Complete but missing burndown date ({flagsByType['complete_missing_date'].length})
             </summary>
-            <ul className="mt-2 space-y-1 text-sm text-gray-700">
+            <ul className="mt-2 space-y-1 text-sm text-slate-300">
               {flagsByType['complete_missing_date'].map((flag, idx) => (
                 <li key={idx}>
                   • {flag.taskTitle} ({flag.assignee})
@@ -54,11 +54,11 @@ export function QALogPanel({ flags }: QALogPanelProps) {
         )}
 
         {flagsByType['complete_missing_story_points'] && (
-          <details className="border-b pb-3">
-            <summary className="cursor-pointer font-semibold text-red-700">
+          <details className="border-b border-white/10 pb-3">
+            <summary className="cursor-pointer font-semibold text-rose-400 hover:text-rose-300">
               Complete but missing story points ({flagsByType['complete_missing_story_points'].length})
             </summary>
-            <ul className="mt-2 space-y-1 text-sm text-gray-700">
+            <ul className="mt-2 space-y-1 text-sm text-slate-300">
               {flagsByType['complete_missing_story_points'].map((flag, idx) => (
                 <li key={idx}>
                   • {flag.taskTitle} ({flag.assignee})
@@ -69,11 +69,11 @@ export function QALogPanel({ flags }: QALogPanelProps) {
         )}
 
         {flagsByType['date_outside_sprint'] && (
-          <details className="border-b pb-3">
-            <summary className="cursor-pointer font-semibold text-yellow-700">
+          <details className="border-b border-white/10 pb-3">
+            <summary className="cursor-pointer font-semibold text-amber-400 hover:text-amber-300">
               Date outside sprint window ({flagsByType['date_outside_sprint'].length})
             </summary>
-            <ul className="mt-2 space-y-1 text-sm text-gray-700">
+            <ul className="mt-2 space-y-1 text-sm text-slate-300">
               {flagsByType['date_outside_sprint'].map((flag, idx) => (
                 <li key={idx}>
                   • {flag.taskTitle} (completed {flag.date})
@@ -84,11 +84,11 @@ export function QALogPanel({ flags }: QALogPanelProps) {
         )}
 
         {flagsByType['incomplete_missing_story_points'] && (
-          <details className="pb-3">
-            <summary className="cursor-pointer font-semibold text-blue-700">
+          <details className="pb-3 border-white/10">
+            <summary className="cursor-pointer font-semibold text-cyan-400 hover:text-cyan-300">
               Incomplete missing story points ({flagsByType['incomplete_missing_story_points'].length})
             </summary>
-            <ul className="mt-2 space-y-1 text-sm text-gray-700">
+            <ul className="mt-2 space-y-1 text-sm text-slate-300">
               {flagsByType['incomplete_missing_story_points'].map((flag, idx) => (
                 <li key={idx}>
                   • {flag.taskTitle} ({flag.assignee})

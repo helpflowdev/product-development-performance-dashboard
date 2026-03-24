@@ -13,7 +13,7 @@ export function AllottedPointsSelect({
 }: AllottedPointsSelectProps) {
   return (
     <div className="flex flex-col gap-2">
-      <label htmlFor="points-select" className="block text-sm font-medium text-gray-700">
+      <label htmlFor="points-select" className="block text-sm font-medium text-slate-300">
         Allotted Points
       </label>
       <select
@@ -21,7 +21,7 @@ export function AllottedPointsSelect({
         value={selectedPoints ?? ''}
         onChange={(e) => onPointsChange(parseInt(e.target.value, 10))}
         disabled={disabled}
-        className="px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500 text-base text-gray-900 font-medium"
+        className="glass-input px-4 py-3 rounded-lg text-base font-medium disabled:opacity-50 disabled:cursor-not-allowed"
       >
         <option value="">-- Choose points --</option>
         {ALLOTTED_POINTS_OPTIONS.map((points) => (

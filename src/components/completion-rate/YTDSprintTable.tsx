@@ -6,9 +6,9 @@ interface YTDSprintTableProps {
 }
 
 function getRateColor(rate: number): string {
-  if (rate >= 80) return 'text-green-700 font-semibold';
-  if (rate >= 60) return 'text-yellow-700 font-semibold';
-  return 'text-red-700 font-semibold';
+  if (rate >= 80) return 'text-emerald-400 font-semibold bg-emerald-400/10 rounded';
+  if (rate >= 60) return 'text-amber-400 font-semibold bg-amber-400/10 rounded';
+  return 'text-rose-400 font-semibold bg-rose-400/10 rounded';
 }
 
 function formatDateRange(start: string, end: string): string {
@@ -42,45 +42,45 @@ export function YTDSprintTable({ sprints }: YTDSprintTableProps) {
   if (sprints.length === 0) {
     return (
       <Card className="mb-6">
-        <h2 className="text-xl font-bold text-gray-900 mb-4">Sprint Summary</h2>
-        <p className="text-gray-600">No sprint data available for the selected filters.</p>
+        <h2 className="text-xl font-bold text-white mb-4">Sprint Summary</h2>
+        <p className="text-slate-300">No sprint data available for the selected filters.</p>
       </Card>
     );
   }
 
   return (
     <Card className="mb-6">
-      <h2 className="text-xl font-bold text-gray-900 mb-4">Sprint Summary</h2>
+      <h2 className="text-xl font-bold text-white mb-4">Sprint Summary</h2>
       <div className="overflow-x-auto">
         <table className="min-w-full border-collapse">
           <thead>
-            <tr className="bg-gray-100 border-b border-gray-300">
-              <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Sprint</th>
-              <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Period</th>
-              <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Total Tasks</th>
-              <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Completed Tasks</th>
-              <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Completion Rate</th>
+            <tr className="bg-white/5 border-b border-white/10">
+              <th className="px-4 py-3 text-left text-sm font-semibold text-cyan-300">Sprint</th>
+              <th className="px-4 py-3 text-left text-sm font-semibold text-cyan-300">Period</th>
+              <th className="px-4 py-3 text-center text-sm font-semibold text-cyan-300">Total Tasks</th>
+              <th className="px-4 py-3 text-center text-sm font-semibold text-cyan-300">Completed Tasks</th>
+              <th className="px-4 py-3 text-center text-sm font-semibold text-cyan-300">Completion Rate</th>
             </tr>
           </thead>
           <tbody>
             {sprints.map((sprint, idx) => (
               <tr
                 key={idx}
-                className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}
+                className={idx % 2 === 0 ? 'bg-transparent' : 'bg-white/3'}
               >
-                <td className="px-4 py-3 text-sm text-gray-900 border-b border-gray-200">
+                <td className="px-4 py-3 text-sm text-slate-200 border-b border-white/10">
                   {sprint.sprintId}
                 </td>
-                <td className="px-4 py-3 text-sm text-gray-600 border-b border-gray-200">
+                <td className="px-4 py-3 text-sm text-slate-300 border-b border-white/10">
                   {formatDateRange(sprint.sprintStartDate, sprint.sprintEndDate)}
                 </td>
-                <td className="px-4 py-3 text-sm text-center text-gray-900 border-b border-gray-200">
+                <td className="px-4 py-3 text-sm text-center text-slate-200 border-b border-white/10">
                   {sprint.total}
                 </td>
-                <td className="px-4 py-3 text-sm text-center text-gray-900 border-b border-gray-200">
+                <td className="px-4 py-3 text-sm text-center text-slate-200 border-b border-white/10">
                   {sprint.completed}
                 </td>
-                <td className={`px-4 py-3 text-sm text-center border-b border-gray-200 ${getRateColor(sprint.completionRate)}`}>
+                <td className={`px-4 py-3 text-sm text-center border-b border-white/10 ${getRateColor(sprint.completionRate)}`}>
                   {sprint.completionRate.toFixed(2)}%
                 </td>
               </tr>

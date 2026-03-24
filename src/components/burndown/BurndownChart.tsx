@@ -31,7 +31,7 @@ function renderCustomLabel(props: any) {
     <text
       x={x}
       y={y - 15}
-      fill="#374151"
+      fill="#94a3b8"
       textAnchor="middle"
       fontSize={12}
       fontWeight={600}
@@ -48,35 +48,35 @@ interface BurndownChartProps {
 
 export function BurndownChart({ data, allottedPoints }: BurndownChartProps) {
   if (data.length === 0) {
-    return <div className="text-center text-gray-500 py-8">No data to display</div>;
+    return <div className="text-center text-slate-300 py-8">No data to display</div>;
   }
 
   return (
-    <div className="w-full bg-white rounded-lg border border-gray-200 p-6">
-      <h2 className="text-lg font-semibold text-gray-900 mb-6">Burndown Trend</h2>
+    <div className="w-full glass-card rounded-xl p-6">
+      <h2 className="text-lg font-semibold text-white mb-6">Burndown Trend</h2>
       <div style={{ width: '100%', height: 550 }}>
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart
             data={data}
             margin={{ top: 40, right: 30, left: 60, bottom: 100 }}
           >
-            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+            <CartesianGrid strokeDasharray="3 3" stroke="#1e1b4b" />
             <XAxis
               dataKey="displayDate"
               angle={-45}
               textAnchor="end"
               height={100}
-              tick={{ fontSize: 12, fill: '#374151' }}
+              tick={{ fontSize: 12, fill: '#94a3b8' }}
               interval={Math.max(0, Math.floor(data.length / 12))}
             />
             <YAxis
               domain={[0, allottedPoints]}
-              tick={{ fontSize: 12, fill: '#374151' }}
+              tick={{ fontSize: 12, fill: '#94a3b8' }}
               label={{
                 value: 'Story Points',
                 angle: -90,
                 position: 'insideLeft',
-                style: { textAnchor: 'middle', fill: '#374151' },
+                style: { textAnchor: 'middle', fill: '#94a3b8' },
               }}
             />
             <Tooltip
@@ -88,11 +88,13 @@ export function BurndownChart({ data, allottedPoints }: BurndownChartProps) {
               }}
               labelFormatter={(label) => `${label}`}
               contentStyle={{
-                backgroundColor: '#fff',
-                border: '1px solid #e5e7eb',
+                backgroundColor: 'rgba(15, 12, 41, 0.92)',
+                border: '1px solid rgba(99, 102, 241, 0.5)',
                 borderRadius: '8px',
+                color: '#f8fafc',
                 padding: '8px',
               }}
+              labelStyle={{ color: '#f8fafc' }}
             />
             <Legend
               wrapperStyle={{ paddingTop: '20px' }}
@@ -119,19 +121,19 @@ export function BurndownChart({ data, allottedPoints }: BurndownChartProps) {
               }}
               isAnimationActive={false}
             />
-            {/* Actual Remaining Line (solid, blue) */}
+            {/* Actual Remaining Line (solid, cyan) */}
             <Line
               type="monotone"
               dataKey="actualRemainingSP"
-              stroke="#3b82f6"
+              stroke="#06b6d4"
               strokeWidth={2.5}
               name="Actual Remaining"
-              dot={{ fill: '#3b82f6', r: 3.5 }}
+              dot={{ fill: '#06b6d4', r: 3.5 }}
               label={(props: any) => {
                 const { x, y, value, index } = props;
                 if (typeof value !== 'number' || index % 2 !== 0) return null;
                 return (
-                  <text x={x} y={y + 15} fill="#2563eb" textAnchor="middle" fontSize={11} fontWeight={500}>
+                  <text x={x} y={y + 15} fill="#06b6d4" textAnchor="middle" fontSize={11} fontWeight={500}>
                     {Math.round(value)}
                   </text>
                 );

@@ -67,8 +67,8 @@ export function IndividualCRTable({ stats, selectedSprintIds }: IndividualCRTabl
 
   const getRateColor = (rate: number): string => {
     return rate >= 90
-      ? 'text-green-700 font-semibold bg-green-50'
-      : 'text-red-700 font-semibold bg-red-50';
+      ? 'text-emerald-400 font-semibold bg-emerald-400/10 rounded'
+      : 'text-rose-400 font-semibold bg-rose-400/10 rounded';
   };
 
   const toggleExpand = (assigneeName: string) => {
@@ -83,7 +83,7 @@ export function IndividualCRTable({ stats, selectedSprintIds }: IndividualCRTabl
 
   const SortHeader = ({ col, label }: { col: SortColumn; label: string }) => (
     <th
-      className="px-4 py-3 text-left text-sm font-semibold text-gray-700 cursor-pointer hover:bg-gray-100"
+      className="px-4 py-3 text-left text-sm font-semibold text-cyan-300 cursor-pointer hover:bg-white/10 transition-colors"
       onClick={() => handleSort(col)}
     >
       <div className="flex items-center gap-2">
@@ -99,7 +99,7 @@ export function IndividualCRTable({ stats, selectedSprintIds }: IndividualCRTabl
     <div className="overflow-x-auto">
       <table className="w-full border-collapse">
         <thead>
-          <tr className="bg-gray-50 border-b border-gray-200">
+          <tr className="bg-white/5 border-b border-white/10">
             {multiSprint && <th className="w-12 px-4 py-3"></th>}
             <SortHeader col="assignee" label="Assignee Name" />
             <SortHeader col="total" label="Total Tasks" />
@@ -113,24 +113,24 @@ export function IndividualCRTable({ stats, selectedSprintIds }: IndividualCRTabl
 
             // Main row
             rows.push(
-              <tr key={stat.assigneeName} className="border-b border-gray-200 hover:bg-gray-50">
+              <tr key={stat.assigneeName} className="border-b border-white/10 hover:bg-white/5 transition-colors">
                 {multiSprint && (
                   <td className="px-4 py-3 text-center">
                     {stat.bySprint.length > 0 && (
                       <button
                         onClick={() => toggleExpand(stat.assigneeName)}
-                        className="text-gray-600 hover:text-gray-900 font-bold"
+                        className="text-slate-300 hover:text-cyan-300 font-bold transition-colors"
                       >
                         {expandedRows.has(stat.assigneeName) ? '▼' : '▶'}
                       </button>
                     )}
                   </td>
                 )}
-                <td className="px-4 py-3 text-sm text-gray-900 font-medium">
+                <td className="px-4 py-3 text-sm text-white font-medium">
                   {stat.assigneeName}
                 </td>
-                <td className="px-4 py-3 text-sm text-gray-700">{stat.total}</td>
-                <td className="px-4 py-3 text-sm text-gray-700">{stat.completed}</td>
+                <td className="px-4 py-3 text-sm text-slate-200">{stat.total}</td>
+                <td className="px-4 py-3 text-sm text-slate-200">{stat.completed}</td>
                 <td className={`px-4 py-3 text-sm rounded ${getRateColor(stat.completionRate)}`}>
                   {stat.completionRate.toFixed(2)}%
                 </td>
@@ -143,14 +143,14 @@ export function IndividualCRTable({ stats, selectedSprintIds }: IndividualCRTabl
                 rows.push(
                   <tr
                     key={`${stat.assigneeName}-${sprintStat.sprintId}`}
-                    className="border-b border-gray-100 bg-gray-50 hover:bg-gray-100"
+                    className="border-b border-white/5 bg-white/3 hover:bg-white/8 transition-colors"
                   >
                     <td className="px-4 py-3"></td>
-                    <td className="px-4 py-3 text-sm text-gray-600 italic pl-12">
+                    <td className="px-4 py-3 text-sm text-slate-300 italic pl-12">
                       {sprintStat.sprintId}
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-600">{sprintStat.total}</td>
-                    <td className="px-4 py-3 text-sm text-gray-600">{sprintStat.completed}</td>
+                    <td className="px-4 py-3 text-sm text-slate-300">{sprintStat.total}</td>
+                    <td className="px-4 py-3 text-sm text-slate-300">{sprintStat.completed}</td>
                     <td className={`px-4 py-3 text-sm rounded ${getRateColor(sprintStat.completionRate)}`}>
                       {sprintStat.completionRate.toFixed(2)}%
                     </td>

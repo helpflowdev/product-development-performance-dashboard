@@ -22,10 +22,12 @@ export function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="w-64 bg-slate-800 text-white min-h-screen p-6 flex flex-col">
+    <aside className="fixed left-0 top-0 w-64 h-screen glass-card border-r border-white/10 text-white p-6 flex flex-col overflow-y-auto">
       {/* Header */}
       <div className="mb-12">
-        <h1 className="text-2xl font-bold tracking-tight">Performance Dashboard</h1>
+        <h1 className="text-lg font-bold tracking-tight bg-gradient-to-r from-purple-400 to-cyan-400 bg-clip-text text-transparent">
+          Performance Dashboard
+        </h1>
         <p className="text-sm text-slate-300 mt-1">Product Development Metrics</p>
       </div>
 
@@ -37,10 +39,10 @@ export function Sidebar() {
             <Link
               key={item.href}
               href={item.href}
-              className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+              className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${
                 isActive
-                  ? 'bg-blue-600 text-white font-semibold'
-                  : 'text-slate-300 hover:bg-slate-700 hover:text-white'
+                  ? 'bg-gradient-to-r from-purple-600/50 to-cyan-600/30 border border-purple-500/50 text-white font-semibold shadow-[0_0_15px_rgba(124,58,237,0.4)]'
+                  : 'text-slate-300 hover:bg-white/10 hover:text-white'
               }`}
             >
               <span className="text-xl">{item.icon}</span>
@@ -50,9 +52,12 @@ export function Sidebar() {
         })}
       </nav>
 
+      {/* Logo */}
+      <img src="/devvy.png" alt="Logo" className="w-56 h-auto rounded-lg mb-4" />
+
       {/* Footer */}
-      <div className="border-t border-slate-700 pt-4 text-xs text-slate-400">
-        <p>© 2026 Product Development</p>
+      <div className="border-t border-white/10 pt-4">
+        <p className="text-xs text-slate-300">© 2026 Product Development</p>
       </div>
     </aside>
   );

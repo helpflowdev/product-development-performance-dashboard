@@ -145,9 +145,9 @@ export default function IndividualCRPage() {
   const yearOptions = YEARS.map((y) => ({ value: String(y), label: String(y) }));
 
   return (
-    <div className="min-h-screen bg-slate-900">
+    <div className="min-h-screen">
       <div className="max-w-7xl mx-auto px-4 py-8">
-        <h1 className="text-3xl font-bold text-white mb-8">Individual Completion Rate</h1>
+        <h1 className="text-xl font-bold text-white mb-8">Individual Completion Rate</h1>
 
         {/* Error display */}
         {error && (
@@ -158,7 +158,7 @@ export default function IndividualCRPage() {
 
         {/* Filters */}
         <Card className="mb-8">
-          <h2 className="text-2xl font-bold text-gray-900 mb-6">Filters</h2>
+          <h2 className="text-base font-bold text-white mb-6">Filters</h2>
 
           {/* Filter grid: 2x3 */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
@@ -223,11 +223,11 @@ export default function IndividualCRPage() {
         {/* Results table */}
         {results && (
           <Card>
-            <h2 className="text-2xl font-bold text-gray-900 mb-6">Results</h2>
+            <h2 className="text-base font-bold text-white mb-6">Results</h2>
             {results.assigneeStats.length > 0 ? (
               <IndividualCRTable stats={results.assigneeStats} selectedSprintIds={results.selectedSprintIds} />
             ) : (
-              <p className="text-gray-500">No data found matching the selected filters.</p>
+              <p className="text-slate-300">No data found matching the selected filters.</p>
             )}
           </Card>
         )}

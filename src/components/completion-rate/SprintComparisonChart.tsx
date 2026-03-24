@@ -14,20 +14,20 @@ function extractSprintLabel(sprintId: string): string {
   return match ? match[0] : sprintId.slice(0, 30);
 }
 
-const COLORS = ['#3b82f6', '#ef4444']; // Blue and Red
+const COLORS = ['#06b6d4', '#f43f5e']; // Cyan and Neon Red
 
 export function SprintComparisonChart({ data, loading }: SprintComparisonChartProps) {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-400"></div>
       </div>
     );
   }
 
   if (!data || data.sprints.length < 2) {
     return (
-      <div className="flex items-center justify-center h-48 text-gray-500">
+      <div className="flex items-center justify-center h-48 text-slate-300">
         <p>Select two sprints and click Compare to see the comparison chart.</p>
       </div>
     );
@@ -57,25 +57,15 @@ export function SprintComparisonChart({ data, loading }: SprintComparisonChartPr
         layout="vertical"
         margin={{ left: 180, right: 60, top: 20, bottom: 20 }}
       >
-        <XAxis type="number" domain={[0, 100]} tickFormatter={(v) => `${v}%`} />
+        <XAxis type="number" domain={[0, 100]} tickFormatter={(v) => `${v}%`} stroke="#94a3b8" tick={{ fill: '#94a3b8' }} />
         <YAxis
           type="category"
           dataKey="label"
           width={170}
-          tick={{ fontSize: 12 }}
+          tick={{ fontSize: 12, fill: '#94a3b8' }}
+          stroke="#94a3b8"
         />
-        <Tooltip
-          formatter={(value) => (typeof value === 'number' ? `${value.toFixed(2)}%` : value)}
-          contentStyle={{
-            backgroundColor: '#f3f4f6',
-            border: '2px solid #3b82f6',
-            borderRadius: '6px',
-            color: '#000',
-            padding: '8px 12px',
-          }}
-          labelStyle={{ color: '#000' }}
-        />
-        <Bar dataKey="rate" barSize={50} radius={[0, 12, 12, 0]}>
+        <Bar dataKey="rate" barSize={50} radius={[0, 12, 12, 0]} isAnimationActive={false}>
           {chartData.map((entry, index) => (
             <Cell key={`cell-${index}`} fill={COLORS[entry.index]} />
           ))}

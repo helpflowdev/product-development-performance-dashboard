@@ -5,8 +5,7 @@ import { SprintMeta } from '@/types/sprint';
 import { BurndownResponse } from '@/types/burndown';
 import { Card } from '@/components/ui/Card';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
-import { SprintSelector } from '@/components/burndown/SprintSelector';
-import { AllottedPointsSelect } from '@/components/burndown/AllottedPointsSelect';
+import { SelectDropdown } from '@/components/ui/SelectDropdown';
 import { GenerateButton } from '@/components/burndown/GenerateButton';
 import { BurndownChart } from '@/components/burndown/BurndownChart';
 import { BurndownTable } from '@/components/burndown/BurndownTable';
@@ -28,10 +27,6 @@ export default function BurndownPage() {
         if (!res.ok) throw new Error('Failed to fetch sprints');
         const data = await res.json();
         setSprints(data.sprints);
-        // Pre-select the first (most recent) sprint
-        if (data.sprints.length > 0) {
-          setSelectedSprint(data.sprints[0].id);
-        }
       } catch (err) {
         setError(`Error fetching sprints: ${String(err)}`);
       }
@@ -72,23 +67,33 @@ export default function BurndownPage() {
   };
 
   return (
-    <div className="flex-1 p-6 overflow-auto bg-slate-900">
+    <div className="flex-1 p-6 overflow-auto">
       <div className="max-w-6xl mx-auto">
-        <h1 className="text-4xl font-bold text-white mb-8">Sprint Burndown Chart</h1>
+        <h1 className="text-xl font-bold text-white mb-8">Sprint Burndown Chart</h1>
 
         {/* Input Card */}
-        <Card className="mb-6 bg-white">
+        <Card className="mb-6">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-            <SprintSelector
-              sprints={sprints}
-              selectedSprint={selectedSprint}
-              onSprintChange={setSelectedSprint}
+            <SelectDropdown
+              label="Select Sprint"
+              options={sprints.map((s) => ({ value: s.id, label: s.id }))}
+              value={selectedSprint}
+              onChange={setSelectedSprint}
               disabled={loading}
+              placeholder="-- Choose a sprint --"
             />
-            <AllottedPointsSelect
-              selectedPoints={allottedPoints}
-              onPointsChange={setAllottedPoints}
+            <SelectDropdown
+              label="Allotted Points"
+              options={[
+                { value: '1600', label: '1600 points' },
+                { value: '1800', label: '1800 points' },
+                { value: '2000', label: '2000 points' },
+                { value: '2200', label: '2200 points' },
+              ]}
+              value={allottedPoints ? String(allottedPoints) : ''}
+              onChange={(val) => setAllottedPoints(val ? parseInt(val, 10) : null)}
               disabled={loading}
+              placeholder="-- Choose points --"
             />
             <div className="flex items-end">
               <GenerateButton
@@ -112,42 +117,42 @@ export default function BurndownPage() {
         {burndownData && (
           <div className="space-y-6">
             {/* Summary Stats */}
-            <Card className="bg-white">
+            <Card>
               <div className="grid grid-cols-3 gap-6">
                 <div>
-                  <p className="text-gray-600 text-sm">Total Allotted Points</p>
-                  <p className="text-2xl font-bold text-gray-900">{burndownData.allottedPoints}</p>
+                  <p className="text-slate-300 text-sm">Total Allotted Points</p>
+                  <p className="text-2xl font-bold text-white">{burndownData.allottedPoints}</p>
                 </div>
                 <div>
-                  <p className="text-gray-600 text-sm">Total Consumed Points</p>
-                  <p className="text-2xl font-bold text-blue-600">{burndownData.totalConsumedPoints}</p>
+                  <p className="text-slate-300 text-sm">Total Consumed Points</p>
+                  <p className="text-2xl font-bold text-cyan-400">{burndownData.totalConsumedPoints}</p>
                 </div>
                 <div>
-                  <p className="text-gray-600 text-sm">Burndown Rate</p>
-                  <p className="text-2xl font-bold text-green-600">{burndownData.burndownRate}</p>
+                  <p className="text-slate-300 text-sm">Burndown Rate</p>
+                  <p className="text-2xl font-bold text-emerald-400">{burndownData.burndownRate}</p>
                 </div>
               </div>
             </Card>
 
             {/* Chart */}
-            <Card className="bg-white">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">Burndown Trend</h2>
+            <Card>
+              <h2 className="text-lg font-semibold text-white mb-4">Burndown Trend</h2>
               <BurndownChart data={burndownData.days} allottedPoints={burndownData.allottedPoints} />
             </Card>
 
             {/* Data Table */}
-            <Card className="bg-white">
+            <Card>
               <BurndownTable data={burndownData.days} />
             </Card>
 
             {/* QA Log */}
-            <Card className="bg-white">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">Data Quality</h2>
+            <Card>
+              <h2 className="text-lg font-semibold text-white mb-4">Data Quality</h2>
               <QALogPanel flags={burndownData.qaFlags} />
             </Card>
 
             {/* Footer */}
-            <div className="text-center text-sm text-gray-400">
+            <div className="text-center text-sm text-slate-300">
               Generated at {new Date(burndownData.computedAt).toLocaleString()}
             </div>
           </div>

@@ -7,9 +7,9 @@ interface SummaryMetricsProps {
 }
 
 function getRateColor(rate: number): string {
-  if (rate >= 80) return 'bg-green-50 border-green-200 text-green-900';
-  if (rate >= 60) return 'bg-yellow-50 border-yellow-200 text-yellow-900';
-  return 'bg-red-50 border-red-200 text-red-900';
+  if (rate >= 80) return 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400';
+  if (rate >= 60) return 'bg-amber-500/10 border-amber-500/30 text-amber-400';
+  return 'bg-rose-500/10 border-rose-500/30 text-rose-400';
 }
 
 export function SummaryMetrics({ summary, assigneeLabel }: SummaryMetricsProps) {
@@ -17,22 +17,22 @@ export function SummaryMetrics({ summary, assigneeLabel }: SummaryMetricsProps) 
 
   return (
     <Card className="mb-6">
-      {assigneeLabel && <p className="text-sm text-gray-600 mb-4">For assignee: {assigneeLabel}</p>}
+      {assigneeLabel && <p className="text-sm text-slate-300 mb-4">For assignee: {assigneeLabel}</p>}
       <div className="grid grid-cols-3 gap-6">
         {/* Total Tasks */}
-        <div className="bg-gray-50 border border-gray-200 rounded-lg p-6">
-          <p className="text-sm font-medium text-gray-600">Total Tasks</p>
-          <p className="text-4xl font-bold text-gray-900 mt-2">{summary.totalTasks}</p>
+        <div className="bg-white/5 border border-white/10 rounded-xl p-6">
+          <p className="text-sm font-medium text-slate-300">Total Tasks</p>
+          <p className="text-4xl font-bold text-white mt-2">{summary.totalTasks}</p>
         </div>
 
         {/* Completed Tasks */}
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
-          <p className="text-sm font-medium text-blue-600">Completed Tasks</p>
-          <p className="text-4xl font-bold text-blue-900 mt-2">{summary.totalCompleted}</p>
+        <div className="bg-cyan-500/10 border border-cyan-500/30 rounded-xl p-6">
+          <p className="text-sm font-medium text-cyan-400">Completed Tasks</p>
+          <p className="text-4xl font-bold text-cyan-100 mt-2">{summary.totalCompleted}</p>
         </div>
 
         {/* Completion Rate */}
-        <div className={`border rounded-lg p-6 ${rateColor}`}>
+        <div className={`border rounded-xl p-6 ${rateColor}`}>
           <p className="text-sm font-medium">Completion Rate</p>
           <p className="text-4xl font-bold mt-2">{summary.completionRate.toFixed(2)}%</p>
         </div>

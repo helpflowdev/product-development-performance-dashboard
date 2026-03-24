@@ -15,7 +15,7 @@ export function SprintSelector({
 }: SprintSelectorProps) {
   return (
     <div className="flex flex-col gap-2">
-      <label htmlFor="sprint-select" className="block text-sm font-medium text-gray-700">
+      <label htmlFor="sprint-select" className="block text-sm font-medium text-slate-300">
         Select Sprint
       </label>
       <select
@@ -23,7 +23,7 @@ export function SprintSelector({
         value={selectedSprint}
         onChange={(e) => onSprintChange(e.target.value)}
         disabled={disabled}
-        className="px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500 text-base text-gray-900 font-medium"
+        className="glass-input px-4 py-3 rounded-lg text-base font-medium disabled:opacity-50 disabled:cursor-not-allowed"
       >
         <option value="">-- Choose a sprint --</option>
         {sprints.map((sprint) => (

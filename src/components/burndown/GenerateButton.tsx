@@ -13,7 +13,7 @@ export function GenerateButton({
     <button
       onClick={onClick}
       disabled={disabled || loading}
-      className="px-6 py-2 bg-blue-500 text-white font-medium rounded-lg hover:bg-blue-600 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+      className="neon-btn px-6 py-2 text-white font-bold rounded-lg disabled:opacity-40 disabled:cursor-not-allowed border border-white/20 hover:border-white/40"
     >
       {loading ? 'Generating...' : 'Generate/Refresh'}
     </button>

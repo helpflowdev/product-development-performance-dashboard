@@ -155,9 +155,9 @@ export default function CompletionRatePage() {
   const yearOptions = YEARS.map((y) => ({ value: String(y), label: String(y) }));
 
   return (
-    <div className="min-h-screen bg-slate-900">
+    <div className="min-h-screen">
       <div className="max-w-7xl mx-auto px-4 py-8">
-        <h1 className="text-3xl font-bold text-white mb-8">Sprint Completion Rate</h1>
+        <h1 className="text-xl font-bold text-white mb-8">Sprint Completion Rate</h1>
 
         {/* Error display (global) */}
         {error && (
@@ -168,7 +168,7 @@ export default function CompletionRatePage() {
 
         {/* ========== SECTION 1: Filter & Analyze ========== */}
         <Card className="mb-8">
-          <h2 className="text-2xl font-bold text-gray-900 mb-6">Filter & Analyze</h2>
+          <h2 className="text-base font-bold text-white mb-6">Filter & Analyze</h2>
 
           {/* Filter grid: 2x2 */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
@@ -231,11 +231,11 @@ export default function CompletionRatePage() {
 
         {/* ========== SECTION 2: Compare Sprints (Always Visible) ========== */}
         <Card className="mb-6">
-          <h2 className="text-2xl font-bold text-gray-900 mb-6">Compare Sprints</h2>
+          <h2 className="text-base font-bold text-white mb-6">Compare Sprints</h2>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-end mb-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Sprint A</label>
+              <label className="block text-sm font-medium text-slate-300 mb-2">Sprint A</label>
               <SprintSelector
                 sprints={sprints}
                 selectedSprint={compareSprintA}
@@ -245,7 +245,7 @@ export default function CompletionRatePage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Sprint B</label>
+              <label className="block text-sm font-medium text-slate-300 mb-2">Sprint B</label>
               <SprintSelector
                 sprints={sprints}
                 selectedSprint={compareSprintB}
@@ -257,7 +257,7 @@ export default function CompletionRatePage() {
             <button
               onClick={handleCompare}
               disabled={compareLoading || !compareSprintA || !compareSprintB}
-              className="px-6 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors font-medium h-10 flex items-center justify-center"
+              className="neon-btn px-6 py-2 text-white rounded-md font-bold h-10 flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed border border-white/20 hover:border-white/40"
             >
               {compareLoading ? 'Comparing...' : 'Compare'}
             </button>
@@ -268,8 +268,8 @@ export default function CompletionRatePage() {
 
           {/* Sprint stats for comparison */}
           {compareData && compareData.sprints.length === 2 && (
-            <div className="mt-8 pt-6 border-t border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900 mb-6">Sprint Details</h3>
+            <div className="mt-8 pt-6 border-t border-white/10">
+              <h3 className="text-lg font-semibold text-white mb-6">Sprint Details</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <SprintStats sprint={compareData.sprints[0]} />
                 <SprintStats sprint={compareData.sprints[1]} />
