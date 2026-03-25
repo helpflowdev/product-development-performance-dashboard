@@ -24,6 +24,7 @@ export function SprintSelector({
         onChange={(e) => onSprintChange(e.target.value)}
         disabled={disabled}
         className="glass-input px-4 py-3 rounded-lg text-base font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+        style={{ background: '#1a1440' }}
       >
         <option value="">-- Choose a sprint --</option>
         {sprints.map((sprint) => (

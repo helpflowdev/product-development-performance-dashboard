@@ -84,7 +84,7 @@ export function MultiSelectDropdown({
       </button>
 
       {isOpen && (
-        <div className="absolute z-50 w-full mt-1 glass-card rounded-lg border border-white/30 shadow-2xl">
+        <div className="absolute z-50 w-full mt-1 rounded-lg border border-white/30 shadow-2xl" style={{ background: '#1a1440' }}>
           {/* Action buttons */}
           <div className="px-3 py-2 border-b border-white/10 flex gap-2">
             <button

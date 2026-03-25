@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/Card';
-import { SprintSelector } from '@/components/burndown/SprintSelector';
 import { GenerateButton } from '@/components/burndown/GenerateButton';
+import { SelectDropdown } from '@/components/ui/SelectDropdown';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { MultiSelectDropdown } from '@/components/completion-rate/MultiSelectDropdown';
 import { SummaryMetrics } from '@/components/completion-rate/SummaryMetrics';
@@ -234,25 +234,23 @@ export default function CompletionRatePage() {
           <h2 className="text-base font-bold text-white mb-6">Compare Sprints</h2>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-end mb-6">
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">Sprint A</label>
-              <SprintSelector
-                sprints={sprints}
-                selectedSprint={compareSprintA}
-                onSprintChange={setCompareSprintA}
-                disabled={compareLoading}
-              />
-            </div>
+            <SelectDropdown
+              label="Sprint A"
+              options={sprintOptions}
+              value={compareSprintA}
+              onChange={setCompareSprintA}
+              disabled={compareLoading}
+              placeholder="-- Choose a sprint --"
+            />
 
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">Sprint B</label>
-              <SprintSelector
-                sprints={sprints}
-                selectedSprint={compareSprintB}
-                onSprintChange={setCompareSprintB}
-                disabled={compareLoading}
-              />
-            </div>
+            <SelectDropdown
+              label="Sprint B"
+              options={sprintOptions}
+              value={compareSprintB}
+              onChange={setCompareSprintB}
+              disabled={compareLoading}
+              placeholder="-- Choose a sprint --"
+            />
 
             <button
               onClick={handleCompare}

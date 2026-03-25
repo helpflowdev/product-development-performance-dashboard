@@ -64,7 +64,7 @@ export function SelectDropdown({
       </button>
 
       {isOpen && (
-        <div className="absolute z-50 w-full mt-1 glass-card rounded-lg border border-white/30 shadow-2xl max-h-64 overflow-y-auto">
+        <div className="absolute z-50 w-full mt-1 rounded-lg border border-white/30 shadow-2xl max-h-64 overflow-y-auto" style={{ background: '#1a1440' }}>
           {options.length === 0 ? (
             <div className="px-3 py-4 text-sm text-slate-300 text-center">No options available</div>
           ) : (
