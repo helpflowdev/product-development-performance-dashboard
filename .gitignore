@@ -39,3 +39,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# project scripts and plans
+update_specific_sprint.js
+update_sprint_feature.md
