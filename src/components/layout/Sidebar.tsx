@@ -1,7 +1,9 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { SyncModal } from '@/components/sync/SyncModal';
 
 interface NavItem {
   label: string;
@@ -20,6 +22,7 @@ const NAV_ITEMS: NavItem[] = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
 
   return (
     <aside className="fixed left-0 top-0 w-64 h-screen glass-card border-r border-white/10 text-white p-6 flex flex-col overflow-y-auto">
@@ -52,6 +55,17 @@ export function Sidebar() {
         })}
       </nav>
 
+      {/* Sync Button */}
+      <div className="mb-4">
+        <button
+          onClick={() => setIsSyncModalOpen(true)}
+          className="w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all text-slate-300 hover:bg-white/10 hover:text-white border border-dashed border-white/20 hover:border-white/40 cursor-pointer"
+        >
+          <span className="text-xl">🔄</span>
+          <span>Update Sprint Data</span>
+        </button>
+      </div>
+
       {/* Logo */}
       <img src="/devvy.png" alt="Logo" className="w-56 h-auto rounded-lg mb-4" />
 
@@ -59,6 +73,12 @@ export function Sidebar() {
       <div className="border-t border-white/10 pt-4">
         <p className="text-xs text-slate-300">© 2026 Product Development</p>
       </div>
+
+      {/* Sync Modal */}
+      <SyncModal
+        isOpen={isSyncModalOpen}
+        onClose={() => setIsSyncModalOpen(false)}
+      />
     </aside>
   );
 }
