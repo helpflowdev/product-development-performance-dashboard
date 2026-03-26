@@ -77,6 +77,12 @@ export function mapRowsToSprintRows(rawRows: string[][]): SprintRow[] {
       continue;
     }
 
+    // Skip non-standard sprints (e.g. "Augment Launch > Sprint #...")
+    const sprintValue = getCellValue(row, colMap['Sprint']);
+    if (sprintValue.includes('Augment Launch >')) {
+      continue;
+    }
+
     sprintRows.push({
       sprint: getCellValue(row, colMap['Sprint']),
       sprintDateStart: getCellValue(row, colMap['Sprint Date Start']),
