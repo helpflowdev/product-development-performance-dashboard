@@ -99,13 +99,32 @@ export function filterByYears(rows: SprintRow[], years: string[]): SprintRow[] {
 }
 
 /**
+ * Map from numeric month string to abbreviated month name used in the sheet.
+ */
+const MONTH_NUM_TO_ABBR: Record<string, string> = {
+  '1': 'Jan', '2': 'Feb', '3': 'Mar', '4': 'Apr',
+  '5': 'May', '6': 'Jun', '7': 'Jul', '8': 'Aug',
+  '9': 'Sep', '10': 'Oct', '11': 'Nov', '12': 'Dec',
+};
+
+/**
  * Filter rows to those matching any of the given months (OR logic).
  * Empty array → return all rows (no filter).
- * Months are expected to be string representations (e.g., "1" for January, "12" for December).
+ * Months from the UI are numeric strings ("1"-"12").
+ * The sheet stores abbreviated names ("Jan"-"Dec").
+ * This function handles both formats.
  */
 export function filterByMonths(rows: SprintRow[], months: string[]): SprintRow[] {
   if (months.length === 0) return rows;
-  const monthSet = new Set(months);
+
+  // Build a set that includes both the raw input AND the abbreviated form
+  const monthSet = new Set<string>();
+  for (const m of months) {
+    monthSet.add(m);
+    const abbr = MONTH_NUM_TO_ABBR[m];
+    if (abbr) monthSet.add(abbr);
+  }
+
   return rows.filter((row) => monthSet.has(row.month));
 }
 
