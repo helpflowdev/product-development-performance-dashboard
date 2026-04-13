@@ -191,7 +191,7 @@ export async function syncSprintData(
         projectInfo.title,
       );
 
-      if (sectionEnd && sectionStart <= sheetRows.length) {
+      if (sectionEnd && sectionStart <= sheetRows.length && sectionEnd < sheetRows.length) {
         await insertSheetRows(sectionEnd, newRows);
       } else {
         await appendSheetRows(newRows);
