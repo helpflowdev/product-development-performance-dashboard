@@ -26,6 +26,7 @@ export type QAFlagType =
 export interface QAFlag {
   type: QAFlagType;
   taskTitle: string;
+  taskUrl?: string;
   assignee?: string;
   date?: string;
   sprintStart?: string;

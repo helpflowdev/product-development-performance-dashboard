@@ -3,6 +3,17 @@
 import { QAFlag, QAFlagType } from '@/types/burndown';
 import { Badge } from '@/components/ui/Badge';
 
+function TaskLink({ flag }: { flag: QAFlag }) {
+  if (flag.taskUrl) {
+    return (
+      <a href={flag.taskUrl} target="_blank" rel="noopener noreferrer" className="underline hover:text-white">
+        {flag.taskTitle}
+      </a>
+    );
+  }
+  return <>{flag.taskTitle}</>;
+}
+
 interface QALogPanelProps {
   flags: QAFlag[];
 }
@@ -46,7 +57,7 @@ export function QALogPanel({ flags }: QALogPanelProps) {
             <ul className="mt-2 space-y-1 text-sm text-slate-300">
               {flagsByType['complete_missing_date'].map((flag, idx) => (
                 <li key={idx}>
-                  • {flag.taskTitle} ({flag.assignee})
+                  • <TaskLink flag={flag} /> ({flag.assignee})
                 </li>
               ))}
             </ul>
@@ -61,7 +72,7 @@ export function QALogPanel({ flags }: QALogPanelProps) {
             <ul className="mt-2 space-y-1 text-sm text-slate-300">
               {flagsByType['complete_missing_story_points'].map((flag, idx) => (
                 <li key={idx}>
-                  • {flag.taskTitle} ({flag.assignee})
+                  • <TaskLink flag={flag} /> ({flag.assignee})
                 </li>
               ))}
             </ul>
@@ -76,7 +87,7 @@ export function QALogPanel({ flags }: QALogPanelProps) {
             <ul className="mt-2 space-y-1 text-sm text-slate-300">
               {flagsByType['date_outside_sprint'].map((flag, idx) => (
                 <li key={idx}>
-                  • {flag.taskTitle} (completed {flag.date})
+                  • <TaskLink flag={flag} /> (completed {flag.date})
                 </li>
               ))}
             </ul>
@@ -91,7 +102,7 @@ export function QALogPanel({ flags }: QALogPanelProps) {
             <ul className="mt-2 space-y-1 text-sm text-slate-300">
               {flagsByType['incomplete_missing_story_points'].map((flag, idx) => (
                 <li key={idx}>
-                  • {flag.taskTitle} ({flag.assignee})
+                  • <TaskLink flag={flag} /> ({flag.assignee})
                 </li>
               ))}
             </ul>

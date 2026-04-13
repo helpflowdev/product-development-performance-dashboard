@@ -104,6 +104,7 @@ export function computeBurndown(
         qaFlags.push({
           type: 'incomplete_missing_story_points',
           taskTitle: row.tasksTitle,
+          taskUrl: row.linkToTask,
           assignee: row.assigneeName,
         });
       }
@@ -118,6 +119,7 @@ export function computeBurndown(
       qaFlags.push({
         type: 'complete_missing_story_points',
         taskTitle: row.tasksTitle,
+        taskUrl: row.linkToTask,
         assignee: row.assigneeName,
       });
       // Still count it with 0 points
@@ -129,6 +131,7 @@ export function computeBurndown(
       qaFlags.push({
         type: 'complete_missing_date',
         taskTitle: row.tasksTitle,
+        taskUrl: row.linkToTask,
         assignee: row.assigneeName,
       });
       continue; // Skip if no date at all
@@ -141,6 +144,7 @@ export function computeBurndown(
       qaFlags.push({
         type: 'date_outside_sprint',
         taskTitle: row.tasksTitle,
+        taskUrl: row.linkToTask,
         date: dateStr,
         sprintStart: toDateString(startDate),
         sprintEnd: toDateString(endDate),
