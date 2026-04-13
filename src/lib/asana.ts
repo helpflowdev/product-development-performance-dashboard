@@ -102,13 +102,23 @@ export async function findAsanaProject(
 }
 
 /**
+ * Format an ISO date string (YYYY-MM-DD) to MM/DD/YYYY.
+ * Handles date-only strings without time/timezone concerns.
+ */
+function formatISODateOnly(isoDateStr: string): string {
+  const [year, month, day] = isoDateStr.split('-');
+  return `${month}/${day}/${year}`;
+}
+
+/**
  * Fetch project details and parse sprint dates from the name.
+ * Falls back to Asana's start_on/due_on fields if name doesn't match expected format.
  * Ports GAS lines 113-149.
  */
 export async function getProjectDetails(
   projectGid: string,
 ): Promise<ProjectInfo | null> {
-  const url = `${ASANA_BASE_URL}/projects/${projectGid}`;
+  const url = `${ASANA_BASE_URL}/projects/${projectGid}?opt_fields=name,gid,start_on,due_on`;
   const response = await fetch(url, { method: 'GET', headers: getHeaders() });
 
   if (!response.ok) {
@@ -130,14 +140,21 @@ export async function getProjectDetails(
     const endMonth = parseInt(match[6]);
     const endDay = parseInt(match[7]);
 
-    const startDate = new Date(year, startMonth - 1, startDay);
-    const endDate = new Date(year, endMonth - 1, endDay);
-
     return {
       gid: project.gid,
       title: project.name,
-      startDate: formatDateInTimezone(startDate),
-      endDate: formatDateInTimezone(endDate),
+      startDate: `${match[4]}/${match[5]}/${year}`,
+      endDate: `${match[6]}/${match[7]}/${year}`,
+    };
+  }
+
+  // Fallback to Asana's start_on/due_on if name doesn't match expected format
+  if (project.start_on && project.due_on) {
+    return {
+      gid: project.gid,
+      title: project.name,
+      startDate: formatISODateOnly(project.start_on),
+      endDate: formatISODateOnly(project.due_on),
     };
   }
 
