@@ -6,6 +6,7 @@ import { MultiSelectDropdown } from '@/components/completion-rate/MultiSelectDro
 import { GenerateButton } from '@/components/burndown/GenerateButton';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { IndividualCRTable } from '@/components/individual-cr/IndividualCRTable';
+import { SummaryMetrics } from '@/components/completion-rate/SummaryMetrics';
 import { SprintMeta } from '@/types/sprint';
 import { IndividualCRResponse } from '@/types/individual-cr';
 
@@ -220,15 +221,31 @@ export default function IndividualCRPage() {
         {/* Loading spinner */}
         {loading && <LoadingSpinner />}
 
-        {/* Results table */}
-        {results && (
-          <Card>
-            <h2 className="text-base font-bold text-white mb-6">Results</h2>
-            {results.assigneeStats.length > 0 ? (
+        {/* Results */}
+        {results && results.assigneeStats.length > 0 && (
+          <>
+            <SummaryMetrics
+              summary={{
+                totalTasks: results.assigneeStats.reduce((sum, s) => sum + s.total, 0),
+                totalCompleted: results.assigneeStats.reduce((sum, s) => sum + s.completed, 0),
+                completionRate: Math.round(
+                  (results.assigneeStats.reduce((sum, s) => sum + s.completed, 0) /
+                    results.assigneeStats.reduce((sum, s) => sum + s.total, 0)) *
+                    100 *
+                    100
+                ) / 100,
+              }}
+            />
+            <Card>
+              <h2 className="text-base font-bold text-white mb-6">Results</h2>
               <IndividualCRTable stats={results.assigneeStats} selectedSprintIds={results.selectedSprintIds} />
-            ) : (
-              <p className="text-slate-300">No data found matching the selected filters.</p>
-            )}
+            </Card>
+          </>
+        )}
+
+        {results && results.assigneeStats.length === 0 && (
+          <Card>
+            <p className="text-slate-300">No data found matching the selected filters.</p>
           </Card>
         )}
       </div>
