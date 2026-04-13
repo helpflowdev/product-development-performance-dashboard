@@ -29,7 +29,7 @@ export function BurndownTable({ data }: BurndownTableProps) {
                 <td className="px-4 py-2 border-b border-white/10 text-slate-100 font-medium">{day.displayDate}</td>
                 <td className="px-4 py-2 border-b border-white/10 text-right text-slate-200">{day.dailyCompletedSP}</td>
                 <td className="px-4 py-2 border-b border-white/10 text-right text-slate-200">{day.cumulativeCompletedSP}</td>
-                <td className="px-4 py-2 border-b border-white/10 text-right font-semibold text-cyan-400">{day.actualRemainingSP}</td>
+                <td className="px-4 py-2 border-b border-white/10 text-right font-semibold text-cyan-400">{day.actualRemainingSP ?? '—'}</td>
                 <td className="px-4 py-2 border-b border-white/10 text-right text-amber-400 font-medium">{day.idealRemainingSP}</td>
               </tr>
             ))}

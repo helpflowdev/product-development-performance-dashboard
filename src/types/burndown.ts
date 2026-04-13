@@ -6,7 +6,7 @@ export interface BurndownDay {
   displayDate: string;                     // "Mar 12" (human-readable)
   dailyCompletedSP: number;
   cumulativeCompletedSP: number;
-  actualRemainingSP: number;
+  actualRemainingSP: number | null;
   idealRemainingSP: number;
   allottedPoints: number;
 }

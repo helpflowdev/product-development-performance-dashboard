@@ -121,7 +121,7 @@ export function BurndownChart({ data, allottedPoints }: BurndownChartProps) {
               }}
               isAnimationActive={false}
             />
-            {/* Actual Remaining Line (solid, cyan) */}
+            {/* Actual Remaining Line (solid, cyan) — stops at today */}
             <Line
               type="monotone"
               dataKey="actualRemainingSP"
@@ -140,6 +140,7 @@ export function BurndownChart({ data, allottedPoints }: BurndownChartProps) {
               }}
               activeDot={{ r: 5 }}
               isAnimationActive={false}
+              connectNulls={false}
             />
           </ComposedChart>
         </ResponsiveContainer>

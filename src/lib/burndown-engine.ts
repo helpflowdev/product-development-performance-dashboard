@@ -166,10 +166,13 @@ export function computeBurndown(
 
   while (cursor <= rangeEnd) {
     const dateStr = toDateString(cursor);
+    const isFuture = isDateAfter(cursor, completionCutoff);
     const dailySP = dailyCompletionMap.get(dateStr) ?? 0;
 
-    cumulativeCompleted += dailySP;
-    const actualRemaining = allottedPoints - cumulativeCompleted;
+    if (!isFuture) {
+      cumulativeCompleted += dailySP;
+    }
+    const actualRemaining = isFuture ? null : allottedPoints - cumulativeCompleted;
     const idealRemaining = Math.round(
       Math.max(0, allottedPoints - dayIndex * dailyIdealBurn)
     );
