@@ -57,7 +57,7 @@ export function QALogPanel({ flags }: QALogPanelProps) {
             <ul className="mt-2 space-y-1 text-sm text-slate-300">
               {flagsByType['complete_missing_date'].map((flag, idx) => (
                 <li key={idx}>
-                  • <TaskLink flag={flag} /> ({flag.assignee})
+                  • <TaskLink flag={flag} /> (<span className="text-red-400">{flag.assignee}</span>)
                 </li>
               ))}
             </ul>
@@ -72,7 +72,7 @@ export function QALogPanel({ flags }: QALogPanelProps) {
             <ul className="mt-2 space-y-1 text-sm text-slate-300">
               {flagsByType['complete_missing_story_points'].map((flag, idx) => (
                 <li key={idx}>
-                  • <TaskLink flag={flag} /> ({flag.assignee})
+                  • <TaskLink flag={flag} /> (<span className="text-red-400">{flag.assignee}</span>)
                 </li>
               ))}
             </ul>
@@ -87,7 +87,7 @@ export function QALogPanel({ flags }: QALogPanelProps) {
             <ul className="mt-2 space-y-1 text-sm text-slate-300">
               {flagsByType['date_outside_sprint'].map((flag, idx) => (
                 <li key={idx}>
-                  • <TaskLink flag={flag} /> (completed {flag.date})
+                  • <TaskLink flag={flag} /> (<span className="text-red-400">completed {flag.date}</span>)
                 </li>
               ))}
             </ul>
@@ -96,13 +96,13 @@ export function QALogPanel({ flags }: QALogPanelProps) {
 
         {flagsByType['incomplete_missing_story_points'] && (
           <details className="pb-3 border-white/10">
-            <summary className="cursor-pointer font-semibold text-cyan-400 hover:text-cyan-300">
+            <summary className="cursor-pointer font-semibold text-cyan-400 hover:text-red-400">
               Incomplete missing story points ({flagsByType['incomplete_missing_story_points'].length})
             </summary>
             <ul className="mt-2 space-y-1 text-sm text-slate-300">
               {flagsByType['incomplete_missing_story_points'].map((flag, idx) => (
                 <li key={idx}>
-                  • <TaskLink flag={flag} /> ({flag.assignee})
+                  • <TaskLink flag={flag} /> (<span className="text-red-400">{flag.assignee}</span>)
                 </li>
               ))}
             </ul>
