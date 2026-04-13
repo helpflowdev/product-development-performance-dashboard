@@ -165,7 +165,7 @@ export function computeBurndown(
     const dailySP = dailyCompletionMap.get(dateStr) ?? 0;
 
     cumulativeCompleted += dailySP;
-    const actualRemaining = Math.max(0, allottedPoints - cumulativeCompleted);
+    const actualRemaining = allottedPoints - cumulativeCompleted;
     const idealRemaining = Math.round(
       Math.max(0, allottedPoints - dayIndex * dailyIdealBurn)
     );
