@@ -65,10 +65,10 @@ export function daysBetween(start: Date, end: Date): number {
 }
 
 /**
- * Check if date1 <= date2 (for comparison)
+ * Check if date1 < date2 (strictly before)
  */
 export function isDateBefore(date1: Date, date2: Date): boolean {
-  return date1.getTime() <= date2.getTime();
+  return date1.getTime() < date2.getTime();
 }
 
 /**
