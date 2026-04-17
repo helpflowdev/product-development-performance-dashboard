@@ -2,6 +2,9 @@ import { NextRequest } from 'next/server';
 import { syncSprintData } from '@/lib/sync-engine';
 import { SyncRequest } from '@/types/sync';
 
+export const runtime = 'nodejs';
+export const maxDuration = 60;
+
 /**
  * POST /api/sync-sprint
  * Streams SSE progress events while syncing Asana tasks to Google Sheets.
