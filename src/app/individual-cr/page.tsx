@@ -43,68 +43,59 @@ export default function IndividualCRPage() {
   // Results and UI state
   const [results, setResults] = useState<IndividualCRResponse | null>(null);
   const [loading, setLoading] = useState(false);
-  const [filtersLoading, setFiltersLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Load sprints on mount
+  const hasAnyFilter =
+    selectedSprints.length > 0 ||
+    selectedRoles.length > 0 ||
+    selectedAssignees.length > 0 ||
+    selectedYears.length > 0 ||
+    selectedMonths.length > 0;
+
+  // Load sprints and full role/assignee options on mount
   useEffect(() => {
-    const loadSprints = async () => {
+    const loadOptions = async () => {
       try {
-        const sprintsRes = await fetch('/api/sprints');
+        const [sprintsRes, optionsRes] = await Promise.all([
+          fetch('/api/sprints'),
+          fetch('/api/individual-cr', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({}),
+          }),
+        ]);
+
         if (!sprintsRes.ok) throw new Error('Failed to load sprints');
         const sprintsData = await sprintsRes.json();
         setSprints(sprintsData.sprints || []);
+
+        if (!optionsRes.ok) throw new Error('Failed to load filter options');
+        const optionsData: IndividualCRResponse = await optionsRes.json();
+        setAvailableRoles(optionsData.allRoles);
+        setAvailableAssignees(optionsData.allAssignees);
       } catch (err) {
-        console.error('Error loading sprints:', err);
-        setError('Failed to load sprints');
+        console.error('Error loading filter options:', err);
+        setError(`Error: ${String(err).replace('Error: ', '')}`);
       }
     };
 
-    loadSprints();
+    loadOptions();
   }, []);
 
-  // When sprints change, fetch available roles and assignees
-  useEffect(() => {
-    const updateFilters = async () => {
-      if (selectedSprints.length === 0) {
-        setAvailableRoles([]);
-        setAvailableAssignees([]);
-        setResults(null);
-        return;
-      }
-
-      setFiltersLoading(true);
-      try {
-        const res = await fetch('/api/individual-cr', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sprintIds: selectedSprints }),
-        });
-
-        if (!res.ok) {
-          const errData = await res.json();
-          throw new Error(errData.error || `HTTP ${res.status}`);
-        }
-
-        const data: IndividualCRResponse = await res.json();
-        setAvailableRoles(data.allRoles);
-        setAvailableAssignees(data.allAssignees);
-        setResults(null); // Clear previous results
-      } catch (err) {
-        console.error('Error updating filters:', err);
-        setError(`Error: ${String(err).replace('Error: ', '')}`);
-      } finally {
-        setFiltersLoading(false);
-      }
-    };
-
-    updateFilters();
-  }, [selectedSprints]);
+  const handleClearFilters = () => {
+    setSelectedSprints([]);
+    setSelectedRoles([]);
+    setSelectedAssignees([]);
+    setSelectedYears([]);
+    setSelectedMonths([]);
+    setResults(null);
+    setError(null);
+  };
 
   // Handle generate
   const handleGenerate = async () => {
-    if (selectedSprints.length === 0) {
-      setError('Please select at least one sprint');
+    if (!hasAnyFilter) {
+      setError('Please select at least one filter');
       return;
     }
 
@@ -116,7 +107,7 @@ export default function IndividualCRPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          sprintIds: selectedSprints,
+          sprintIds: selectedSprints.length > 0 ? selectedSprints : undefined,
           roles: selectedRoles.length > 0 ? selectedRoles : undefined,
           assigneeNames: selectedAssignees.length > 0 ? selectedAssignees : undefined,
           years: selectedYears.length > 0 ? selectedYears : undefined,
@@ -159,7 +150,17 @@ export default function IndividualCRPage() {
 
         {/* Filters */}
         <Card className="mb-8">
-          <h2 className="text-base font-bold text-white mb-6">Filters</h2>
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-base font-bold text-white">Filters</h2>
+            <button
+              type="button"
+              onClick={handleClearFilters}
+              disabled={!hasAnyFilter}
+              className="text-xs text-cyan-300 hover:text-cyan-200 disabled:text-slate-500 disabled:cursor-not-allowed transition-colors"
+            >
+              Clear Filters
+            </button>
+          </div>
 
           {/* Filter grid: 2x3 */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
@@ -177,7 +178,7 @@ export default function IndividualCRPage() {
               options={roleOptions}
               selected={selectedRoles}
               onChange={setSelectedRoles}
-              disabled={selectedSprints.length === 0 || filtersLoading}
+              disabled={false}
               placeholder="All Roles"
             />
 
@@ -186,7 +187,7 @@ export default function IndividualCRPage() {
               options={assigneeOptions}
               selected={selectedAssignees}
               onChange={setSelectedAssignees}
-              disabled={selectedSprints.length === 0 || filtersLoading}
+              disabled={false}
               placeholder="All Assignees"
             />
 
@@ -195,7 +196,7 @@ export default function IndividualCRPage() {
               options={yearOptions}
               selected={selectedYears}
               onChange={setSelectedYears}
-              disabled={selectedSprints.length === 0}
+              disabled={false}
               placeholder="All Years"
             />
 
@@ -204,7 +205,7 @@ export default function IndividualCRPage() {
               options={MONTHS}
               selected={selectedMonths}
               onChange={setSelectedMonths}
-              disabled={selectedSprints.length === 0}
+              disabled={false}
               placeholder="All Months"
             />
 
@@ -212,7 +213,7 @@ export default function IndividualCRPage() {
               <GenerateButton
                 onClick={handleGenerate}
                 loading={loading}
-                disabled={selectedSprints.length === 0}
+                disabled={!hasAnyFilter}
               />
             </div>
           </div>

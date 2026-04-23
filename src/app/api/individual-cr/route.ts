@@ -22,13 +22,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
     const body = (await request.json()) as IndividualCRRequest;
 
-    // Validate request: sprintIds is required and non-empty
-    if (!body.sprintIds || !Array.isArray(body.sprintIds) || body.sprintIds.length === 0) {
-      return NextResponse.json(
-        { error: 'sprintIds must be a non-empty array' },
-        { status: 400 }
-      );
-    }
+    const sprintIds = body.sprintIds ?? [];
+    const hasAnyFilter =
+      sprintIds.length > 0 ||
+      (body.roles?.length ?? 0) > 0 ||
+      (body.assigneeNames?.length ?? 0) > 0 ||
+      (body.years?.length ?? 0) > 0 ||
+      (body.months?.length ?? 0) > 0;
 
     // Fetch and parse sheet data
     const rawRows = await fetchSheetRows();
@@ -38,22 +38,28 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: 'No data found in sheet' }, { status: 404 });
     }
 
-    // Filter to selected sprints
-    const sprintFilteredRows = filterBySprints(sprintRows, body.sprintIds);
+    // Dropdown options come from the full dataset so every filter is usable on its own
+    const allRoles = getUniqueRoles(sprintRows);
+    const allAssignees = getUniqueAssignees(sprintRows);
 
-    if (sprintFilteredRows.length === 0) {
-      return NextResponse.json(
-        { error: `No data found for selected sprints` },
-        { status: 404 }
-      );
+    // Without any filter, return options only (no stats) — the client guards this too
+    if (!hasAnyFilter) {
+      const response: IndividualCRResponse = {
+        assigneeStats: [],
+        allRoles,
+        allAssignees,
+        selectedSprintIds: [],
+        computedAt: new Date().toISOString(),
+      };
+      return NextResponse.json(response);
     }
 
-    // Get available roles and assignees from sprint-filtered data
-    const allRoles = getUniqueRoles(sprintFilteredRows);
-    const allAssignees = getUniqueAssignees(sprintFilteredRows);
+    // Apply filters in any combination
+    let filteredRows = sprintRows;
 
-    // Apply optional filters
-    let filteredRows = sprintFilteredRows;
+    if (sprintIds.length > 0) {
+      filteredRows = filterBySprints(filteredRows, sprintIds);
+    }
 
     if (body.roles && body.roles.length > 0) {
       filteredRows = filterByRoles(filteredRows, body.roles);
@@ -72,13 +78,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     // Compute per-assignee stats
-    const assigneeStats = computeIndividualStats(filteredRows, body.sprintIds);
+    const assigneeStats = computeIndividualStats(filteredRows, sprintIds);
 
     const response: IndividualCRResponse = {
       assigneeStats,
       allRoles,
       allAssignees,
-      selectedSprintIds: body.sprintIds,
+      selectedSprintIds: sprintIds,
       computedAt: new Date().toISOString(),
     };
 

@@ -24,7 +24,7 @@ export interface AssigneeCompletionStat {
  * POST /api/individual-cr request
  */
 export interface IndividualCRRequest {
-  sprintIds: string[]; // required — at least one sprint
+  sprintIds?: string[]; // optional — any filter combination is allowed
   roles?: string[]; // optional, '' matches blank role
   assigneeNames?: string[]; // optional
   years?: string[]; // optional
