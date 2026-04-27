@@ -11,6 +11,7 @@ import {
   getUniqueAssignees,
   computeIndividualStats,
 } from '@/lib/completion-rate-engine';
+import { filterToDevMembers } from '@/lib/dev-members';
 import { IndividualCRRequest, IndividualCRResponse } from '@/types/individual-cr';
 
 /**
@@ -38,9 +39,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: 'No data found in sheet' }, { status: 404 });
     }
 
-    // Dropdown options come from the full dataset so every filter is usable on its own
+    // Dropdown options come from the full dataset so every filter is usable on its own.
+    // Assignees are restricted to current dev members regardless of other filters.
     const allRoles = getUniqueRoles(sprintRows);
-    const allAssignees = getUniqueAssignees(sprintRows);
+    const allAssignees = filterToDevMembers(getUniqueAssignees(sprintRows));
 
     // Without any filter, return options only (no stats) — the client guards this too
     if (!hasAnyFilter) {

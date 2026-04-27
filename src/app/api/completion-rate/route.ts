@@ -10,6 +10,7 @@ import {
   filterByAssignees,
   getUniqueAssignees,
 } from '@/lib/completion-rate-engine';
+import { filterToDevMembers } from '@/lib/dev-members';
 import { CompletionRateRequest, CompletionRateResponse } from '@/types/completion-rate';
 
 /**
@@ -48,8 +49,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: 'No data found in sheet' }, { status: 404 });
     }
 
-    // Get full assignee list from all rows (for filter dropdown)
-    const allAssignees = getUniqueAssignees(sprintRows);
+    // Assignee dropdown is restricted to current dev members, regardless of other filters.
+    const allAssignees = filterToDevMembers(getUniqueAssignees(sprintRows));
 
     // Apply filters in sequence (OR logic for each filter, AND between filters)
     let filteredRows = [...sprintRows];

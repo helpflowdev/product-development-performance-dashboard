@@ -54,6 +54,21 @@ export default function CompletionRatePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const hasAnyFilter =
+    selectedSprints.length > 0 ||
+    selectedAssignees.length > 0 ||
+    selectedYears.length > 0 ||
+    selectedMonths.length > 0;
+
+  const handleClearFilters = () => {
+    setSelectedSprints([]);
+    setSelectedAssignees([]);
+    setSelectedYears([]);
+    setSelectedMonths([]);
+    setCompletionData(null);
+    setError(null);
+  };
+
   // Load sprints and assignees on mount
   useEffect(() => {
     const loadOptions = async () => {
@@ -168,7 +183,17 @@ export default function CompletionRatePage() {
 
         {/* ========== SECTION 1: Filter & Analyze ========== */}
         <Card className="mb-8">
-          <h2 className="text-base font-bold text-white mb-6">Filter & Analyze</h2>
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-base font-bold text-white">Filter & Analyze</h2>
+            <button
+              type="button"
+              onClick={handleClearFilters}
+              disabled={!hasAnyFilter}
+              className="text-xs text-cyan-300 hover:text-cyan-200 disabled:text-slate-500 disabled:cursor-not-allowed transition-colors"
+            >
+              Clear Filters
+            </button>
+          </div>
 
           {/* Filter grid: 2x2 */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
