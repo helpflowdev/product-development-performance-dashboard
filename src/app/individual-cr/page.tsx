@@ -239,7 +239,7 @@ export default function IndividualCRPage() {
             />
             <Card>
               <h2 className="text-base font-bold text-white mb-6">Results</h2>
-              <IndividualCRTable stats={results.assigneeStats} selectedSprintIds={results.selectedSprintIds} />
+              <IndividualCRTable stats={results.assigneeStats} />
             </Card>
           </>
         )}

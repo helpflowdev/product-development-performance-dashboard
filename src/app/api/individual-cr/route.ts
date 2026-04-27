@@ -79,8 +79,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       filteredRows = filterByMonths(filteredRows, body.months);
     }
 
-    // Compute per-assignee stats
-    const assigneeStats = computeIndividualStats(filteredRows, sprintIds);
+    // Compute per-assignee stats with Month → Sprint nested breakdown
+    const assigneeStats = computeIndividualStats(filteredRows);
 
     const response: IndividualCRResponse = {
       assigneeStats,

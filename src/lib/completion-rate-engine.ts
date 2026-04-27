@@ -1,7 +1,33 @@
 import { SprintRow } from '@/types/sprint';
 import { SprintCompletionStat, CompletionRateSummary } from '@/types/completion-rate';
-import { AssigneeCompletionStat, AssigneeSprintStat } from '@/types/individual-cr';
+import {
+  AssigneeCompletionStat,
+  AssigneeMonthStat,
+  AssigneeSprintStat,
+} from '@/types/individual-cr';
 import { getUniqueSprints } from './burndown-engine';
+
+const MONTH_ABBR_TO_NUM: Record<string, number> = {
+  Jan: 1, Feb: 2, Mar: 3, Apr: 4, May: 5, Jun: 6,
+  Jul: 7, Aug: 8, Sep: 9, Oct: 10, Nov: 11, Dec: 12,
+};
+
+const MONTH_NUM_TO_FULL = [
+  '', 'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+function parseMonthToNum(raw: string | undefined | null): number | null {
+  const s = (raw ?? '').trim();
+  if (!s) return null;
+  const abbr = MONTH_ABBR_TO_NUM[s];
+  if (abbr) return abbr;
+  if (/^\d+$/.test(s)) {
+    const n = parseInt(s, 10);
+    if (n >= 1 && n <= 12) return n;
+  }
+  return null;
+}
 
 /**
  * Check if a row should be counted toward completion rate.
@@ -199,15 +225,25 @@ export function getUniqueRoles(rows: SprintRow[]): string[] {
 }
 
 /**
- * Compute per-assignee completion stats, optionally broken down per sprint.
+ * Compute per-assignee completion stats with a Month → Sprint nested breakdown.
  * Returns one AssigneeCompletionStat per unique assignee, sorted alphabetically by assigneeName.
- * bySprint is populated only when selectedSprintIds.length > 1.
+ * byMonth is always populated; rows without a parseable month are excluded from the breakdown
+ * but still counted in the assignee totals.
  */
 export function computeIndividualStats(
-  rows: SprintRow[],
-  selectedSprintIds: string[]
+  rows: SprintRow[]
 ): AssigneeCompletionStat[] {
   if (rows.length === 0) return [];
+
+  // Sprint metadata for sorting sprints within a month by start date
+  const sprintMeta = new Map(getUniqueSprints(rows).map((s) => [s.id, s]));
+
+  // Show year in the month label only if rows span more than one year
+  const yearsInRows = new Set<string>();
+  for (const row of rows) {
+    if (row.year && row.year.trim()) yearsInRows.add(row.year.trim());
+  }
+  const showYearInLabel = yearsInRows.size > 1;
 
   // Group rows by assignee
   const byAssignee = new Map<string, SprintRow[]>();
@@ -225,17 +261,16 @@ export function computeIndividualStats(
   const results: AssigneeCompletionStat[] = [];
 
   for (const [assigneeName, assigneeRows] of byAssignee.entries()) {
-    // Compute aggregate stats
+    // Aggregate stats
     const total = assigneeRows.length;
     const completed = assigneeRows.filter(isCompleted).length;
     const completionRate = total > 0 ? (completed / total) * 100 : 0;
 
-    // Determine role: most common non-blank role in this assignee's rows
+    // Primary role: most common non-blank role in this assignee's rows
     const roleMap = new Map<string, number>();
     for (const row of assigneeRows) {
       const role = row.role && row.role.trim() ? row.role.trim() : '';
       if (role) {
-        // Only count non-blank roles for frequency
         roleMap.set(role, (roleMap.get(role) || 0) + 1);
       }
     }
@@ -248,45 +283,79 @@ export function computeIndividualStats(
       }
     }
 
-    // Compute per-sprint stats if multiple sprints selected
-    let bySprint: AssigneeSprintStat[] = [];
-    if (selectedSprintIds.length > 1) {
-      const bySprintMap = new Map<string, { total: number; completed: number }>();
+    // Build Month → Sprint nested breakdown
+    type SprintBucket = { total: number; completed: number };
+    type MonthBucket = {
+      year: string;
+      monthNum: number;
+      total: number;
+      completed: number;
+      sprints: Map<string, SprintBucket>;
+    };
+    const monthMap = new Map<string, MonthBucket>(); // key = `${year}-${MM}`
 
-      for (const row of assigneeRows) {
-        const sprintId = row.sprint;
-        if (!bySprintMap.has(sprintId)) {
-          bySprintMap.set(sprintId, { total: 0, completed: 0 });
-        }
-        const stat = bySprintMap.get(sprintId)!;
-        stat.total += 1;
-        if (isCompleted(row)) {
-          stat.completed += 1;
-        }
+    for (const row of assigneeRows) {
+      const monthNum = parseMonthToNum(row.month);
+      if (!monthNum) continue; // exclude from breakdown only
+      const year = (row.year ?? '').trim();
+      const key = `${year}-${String(monthNum).padStart(2, '0')}`;
+
+      let bucket = monthMap.get(key);
+      if (!bucket) {
+        bucket = { year, monthNum, total: 0, completed: 0, sprints: new Map() };
+        monthMap.set(key, bucket);
       }
+      bucket.total += 1;
+      if (isCompleted(row)) bucket.completed += 1;
 
-      // Convert to AssigneeSprintStat array, ordered by selectedSprintIds
-      const sprintOrder = new Map(selectedSprintIds.map((id, idx) => [id, idx]));
-      const sprintStats: AssigneeSprintStat[] = [];
-      for (const [sprintId, stat] of bySprintMap.entries()) {
-        const rate = stat.total > 0 ? (stat.completed / stat.total) * 100 : 0;
-        sprintStats.push({
+      const sprintId = row.sprint;
+      let sprintBucket = bucket.sprints.get(sprintId);
+      if (!sprintBucket) {
+        sprintBucket = { total: 0, completed: 0 };
+        bucket.sprints.set(sprintId, sprintBucket);
+      }
+      sprintBucket.total += 1;
+      if (isCompleted(row)) sprintBucket.completed += 1;
+    }
+
+    const byMonth: AssigneeMonthStat[] = [];
+    for (const [monthKey, bucket] of monthMap.entries()) {
+      const sprints: AssigneeSprintStat[] = [];
+      for (const [sprintId, s] of bucket.sprints.entries()) {
+        const rate = s.total > 0 ? (s.completed / s.total) * 100 : 0;
+        sprints.push({
           sprintId,
-          total: stat.total,
-          completed: stat.completed,
+          total: s.total,
+          completed: s.completed,
           completionRate: Math.round(rate * 100) / 100,
         });
       }
-
-      // Sort by selected sprint order
-      sprintStats.sort((a, b) => {
-        const orderA = sprintOrder.get(a.sprintId) ?? Infinity;
-        const orderB = sprintOrder.get(b.sprintId) ?? Infinity;
-        return orderA - orderB;
+      // Sort sprints chronologically within the month by start date; fall back to id
+      sprints.sort((a, b) => {
+        const aDate = sprintMeta.get(a.sprintId)?.startDate ?? '';
+        const bDate = sprintMeta.get(b.sprintId)?.startDate ?? '';
+        const cmp = aDate.localeCompare(bDate);
+        return cmp !== 0 ? cmp : a.sprintId.localeCompare(b.sprintId);
       });
 
-      bySprint = sprintStats;
+      const fullName = MONTH_NUM_TO_FULL[bucket.monthNum];
+      const monthLabel = showYearInLabel && bucket.year
+        ? `${fullName} ${bucket.year}`
+        : fullName;
+      const monthRate = bucket.total > 0 ? (bucket.completed / bucket.total) * 100 : 0;
+
+      byMonth.push({
+        monthKey,
+        monthLabel,
+        total: bucket.total,
+        completed: bucket.completed,
+        completionRate: Math.round(monthRate * 100) / 100,
+        sprints,
+      });
     }
+
+    // Months chronologically ascending
+    byMonth.sort((a, b) => a.monthKey.localeCompare(b.monthKey));
 
     results.push({
       assigneeName,
@@ -294,11 +363,10 @@ export function computeIndividualStats(
       total,
       completed,
       completionRate: Math.round(completionRate * 100) / 100,
-      bySprint,
+      byMonth,
     });
   }
 
-  // Sort alphabetically by assignee name
   results.sort((a, b) => a.assigneeName.localeCompare(b.assigneeName));
 
   return results;

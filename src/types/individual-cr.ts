@@ -1,11 +1,23 @@
 /**
- * Per-sprint stats for an assignee
+ * Per-sprint stats for an assignee within a month bucket
  */
 export interface AssigneeSprintStat {
   sprintId: string;
   total: number;
   completed: number;
   completionRate: number; // 0-100
+}
+
+/**
+ * Per-month stats for an assignee, with nested sprint breakdown
+ */
+export interface AssigneeMonthStat {
+  monthKey: string; // sortable e.g. "2026-01"
+  monthLabel: string; // display e.g. "January" or "January 2026" when multi-year
+  total: number;
+  completed: number;
+  completionRate: number; // 0-100
+  sprints: AssigneeSprintStat[]; // nested sprint breakdown for this month
 }
 
 /**
@@ -17,7 +29,7 @@ export interface AssigneeCompletionStat {
   total: number; // across all selected sprints
   completed: number;
   completionRate: number; // overall 0-100
-  bySprint: AssigneeSprintStat[]; // per-sprint breakdown (empty if only 1 sprint selected)
+  byMonth: AssigneeMonthStat[]; // month → sprint nested breakdown
 }
 
 /**
