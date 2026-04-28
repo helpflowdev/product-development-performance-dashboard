@@ -82,6 +82,38 @@ export function IndividualCRTable({ stats }: IndividualCRTableProps) {
     setExpandedMonths(next);
   };
 
+  const expandableAssignees = stats.filter((s) => s.byMonth.length > 0);
+  const hasExpandable = expandableAssignees.length > 0;
+  const isAnythingExpanded = expandedAssignees.size > 0 || expandedMonths.size > 0;
+  const areAllMonthsExpanded =
+    expandableAssignees.length > 0 &&
+    expandableAssignees.every((s) => expandedAssignees.has(s.assigneeName));
+
+  const handleExpandMonths = () => {
+    setExpandedAssignees(new Set(expandableAssignees.map((s) => s.assigneeName)));
+    setExpandedMonths(new Set());
+  };
+
+  const handleExpandAll = () => {
+    const allAssignees = new Set<string>();
+    const allMonths = new Set<string>();
+    for (const stat of expandableAssignees) {
+      allAssignees.add(stat.assigneeName);
+      for (const month of stat.byMonth) {
+        if (month.sprints.length > 0) {
+          allMonths.add(`${stat.assigneeName}|${month.monthKey}`);
+        }
+      }
+    }
+    setExpandedAssignees(allAssignees);
+    setExpandedMonths(allMonths);
+  };
+
+  const handleCollapseAll = () => {
+    setExpandedAssignees(new Set());
+    setExpandedMonths(new Set());
+  };
+
   const SortHeader = ({ col, label }: { col: SortColumn; label: string }) => (
     <th
       className="px-4 py-3 text-left text-sm font-semibold text-cyan-300 cursor-pointer hover:bg-white/10 transition-colors"
@@ -98,6 +130,33 @@ export function IndividualCRTable({ stats }: IndividualCRTableProps) {
 
   return (
     <div className="overflow-x-auto">
+      {hasExpandable && (
+        <div className="flex items-center justify-end gap-4 mb-3 text-xs">
+          <button
+            type="button"
+            onClick={handleExpandMonths}
+            disabled={areAllMonthsExpanded && expandedMonths.size === 0}
+            className="text-cyan-300 hover:text-cyan-200 disabled:text-slate-500 disabled:cursor-not-allowed transition-colors"
+          >
+            Expand Months
+          </button>
+          <button
+            type="button"
+            onClick={handleExpandAll}
+            className="text-cyan-300 hover:text-cyan-200 transition-colors"
+          >
+            Expand All
+          </button>
+          <button
+            type="button"
+            onClick={handleCollapseAll}
+            disabled={!isAnythingExpanded}
+            className="text-cyan-300 hover:text-cyan-200 disabled:text-slate-500 disabled:cursor-not-allowed transition-colors"
+          >
+            Collapse All
+          </button>
+        </div>
+      )}
       <table className="w-full border-collapse">
         <thead>
           <tr className="bg-white/5 border-b border-white/10">
