@@ -134,7 +134,9 @@ export default function IndividualCRPage() {
   const sprintOptions = sprints.map((s) => ({ value: s.id, label: s.id }));
   const roleOptions = availableRoles.map((r) => ({ value: r, label: r || '(Blank)' }));
   const assigneeOptions = availableAssignees.map((a) => ({ value: a, label: a }));
-  const yearOptions = YEARS.map((y) => ({ value: String(y), label: String(y) }));
+  const yearOptions = [...YEARS]
+    .sort((a, b) => b - a)
+    .map((y) => ({ value: String(y), label: String(y) }));
 
   return (
     <div className="min-h-screen">

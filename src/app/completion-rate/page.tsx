@@ -167,7 +167,9 @@ export default function CompletionRatePage() {
   // Convert sprint objects to options for MultiSelectDropdown
   const sprintOptions = sprints.map((s) => ({ value: s.id, label: s.id }));
   const assigneeOptions = allAssignees.map((a) => ({ value: a, label: a }));
-  const yearOptions = YEARS.map((y) => ({ value: String(y), label: String(y) }));
+  const yearOptions = [...YEARS]
+    .sort((a, b) => b - a)
+    .map((y) => ({ value: String(y), label: String(y) }));
 
   return (
     <div className="min-h-screen">
@@ -249,8 +251,12 @@ export default function CompletionRatePage() {
             {/* Summary metrics */}
             <SummaryMetrics summary={completionData.summary} />
 
-            {/* Sprint summary table */}
-            <YTDSprintTable sprints={completionData.sprintStats} />
+            {/* Sprint summary table — group by month when multiple months are
+                explicitly selected and the user hasn't pinned to specific sprints. */}
+            <YTDSprintTable
+              sprints={completionData.sprintStats}
+              groupByMonth={selectedMonths.length > 1 && selectedSprints.length === 0}
+            />
           </>
         )}
 

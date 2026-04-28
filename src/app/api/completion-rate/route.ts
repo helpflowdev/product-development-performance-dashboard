@@ -5,11 +5,10 @@ import {
   computeSummary,
   computeSprintStats,
   filterBySprints,
-  filterByYears,
-  filterByMonths,
   filterByAssignees,
   getUniqueAssignees,
 } from '@/lib/completion-rate-engine';
+import { filterBySprintPrimaryMonth } from '@/lib/sprint-primary-month';
 import { filterToDevMembers } from '@/lib/dev-members';
 import { CompletionRateRequest, CompletionRateResponse } from '@/types/completion-rate';
 
@@ -59,12 +58,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       filteredRows = filterBySprints(filteredRows, body.sprintIds);
     }
 
-    if (body.years && body.years.length > 0) {
-      filteredRows = filterByYears(filteredRows, body.years);
-    }
-
-    if (body.months && body.months.length > 0) {
-      filteredRows = filterByMonths(filteredRows, body.months);
+    // Year/month filters are applied at the sprint level: a sprint is included
+    // only when its primary (majority-days) month/year matches the selection,
+    // so a sprint that straddles two months counts under exactly one of them.
+    const yearsFilter = body.years && body.years.length > 0 ? body.years : [];
+    const monthsFilter = body.months && body.months.length > 0 ? body.months : [];
+    if (yearsFilter.length > 0 || monthsFilter.length > 0) {
+      filteredRows = filterBySprintPrimaryMonth(filteredRows, yearsFilter, monthsFilter);
     }
 
     if (body.assigneeNames && body.assigneeNames.length > 0) {
