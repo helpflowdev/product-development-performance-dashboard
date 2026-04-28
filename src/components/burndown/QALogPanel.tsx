@@ -19,9 +19,11 @@ interface QALogPanelProps {
 }
 
 export function QALogPanel({ flags }: QALogPanelProps) {
-  const errorCount = flags.filter((f) => f.type.includes('missing')).length;
+  const errorCount = flags.filter((f) => f.type === 'complete_missing_date').length;
   const warningCount = flags.filter((f) => f.type === 'date_outside_sprint').length;
-  const infoCount = flags.filter((f) => f.type === 'incomplete_missing_story_points').length;
+  const infoCount = flags.filter(
+    (f) => f.type === 'incomplete_missing_story_points' || f.type === 'complete_missing_story_points'
+  ).length;
 
   if (flags.length === 0) {
     return (
@@ -66,7 +68,7 @@ export function QALogPanel({ flags }: QALogPanelProps) {
 
         {flagsByType['complete_missing_story_points'] && (
           <details className="border-b border-white/10 pb-3">
-            <summary className="cursor-pointer font-semibold text-rose-400 hover:text-rose-300">
+            <summary className="cursor-pointer font-semibold text-cyan-400 hover:text-cyan-300">
               Complete but missing story points ({flagsByType['complete_missing_story_points'].length})
             </summary>
             <ul className="mt-2 space-y-1 text-sm text-slate-300">
