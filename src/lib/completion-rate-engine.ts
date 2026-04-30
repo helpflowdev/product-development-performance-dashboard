@@ -7,21 +7,31 @@ import {
 } from '@/types/individual-cr';
 import { getUniqueSprints } from './burndown-engine';
 
-const MONTH_ABBR_TO_NUM: Record<string, number> = {
-  Jan: 1, Feb: 2, Mar: 3, Apr: 4, May: 5, Jun: 6,
-  Jul: 7, Aug: 8, Sep: 9, Oct: 10, Nov: 11, Dec: 12,
-};
-
 const MONTH_NUM_TO_FULL = [
   '', 'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
 
+const MONTH_NAME_TO_NUM: Record<string, number> = {
+  jan: 1, january: 1,
+  feb: 2, february: 2,
+  mar: 3, march: 3,
+  apr: 4, april: 4,
+  may: 5,
+  jun: 6, june: 6,
+  jul: 7, july: 7,
+  aug: 8, august: 8,
+  sep: 9, sept: 9, september: 9,
+  oct: 10, october: 10,
+  nov: 11, november: 11,
+  dec: 12, december: 12,
+};
+
 function parseMonthToNum(raw: string | undefined | null): number | null {
   const s = (raw ?? '').trim();
   if (!s) return null;
-  const abbr = MONTH_ABBR_TO_NUM[s];
-  if (abbr) return abbr;
+  const named = MONTH_NAME_TO_NUM[s.toLowerCase()];
+  if (named) return named;
   if (/^\d+$/.test(s)) {
     const n = parseInt(s, 10);
     if (n >= 1 && n <= 12) return n;
@@ -125,33 +135,26 @@ export function filterByYears(rows: SprintRow[], years: string[]): SprintRow[] {
 }
 
 /**
- * Map from numeric month string to abbreviated month name used in the sheet.
- */
-const MONTH_NUM_TO_ABBR: Record<string, string> = {
-  '1': 'Jan', '2': 'Feb', '3': 'Mar', '4': 'Apr',
-  '5': 'May', '6': 'Jun', '7': 'Jul', '8': 'Aug',
-  '9': 'Sep', '10': 'Oct', '11': 'Nov', '12': 'Dec',
-};
-
-/**
  * Filter rows to those matching any of the given months (OR logic).
  * Empty array → return all rows (no filter).
- * Months from the UI are numeric strings ("1"-"12").
- * The sheet stores abbreviated names ("Jan"-"Dec").
- * This function handles both formats.
+ * The UI sends numeric strings ("1"-"12"). The sheet may store the month as
+ * a number, an abbreviation ("Mar"), or a full name ("March") — all three
+ * are normalized to a number before comparison.
  */
 export function filterByMonths(rows: SprintRow[], months: string[]): SprintRow[] {
   if (months.length === 0) return rows;
 
-  // Build a set that includes both the raw input AND the abbreviated form
-  const monthSet = new Set<string>();
+  const wantedNums = new Set<number>();
   for (const m of months) {
-    monthSet.add(m);
-    const abbr = MONTH_NUM_TO_ABBR[m];
-    if (abbr) monthSet.add(abbr);
+    const n = parseMonthToNum(m);
+    if (n) wantedNums.add(n);
   }
+  if (wantedNums.size === 0) return rows;
 
-  return rows.filter((row) => monthSet.has(row.month));
+  return rows.filter((row) => {
+    const n = parseMonthToNum(row.month);
+    return n !== null && wantedNums.has(n);
+  });
 }
 
 /**
