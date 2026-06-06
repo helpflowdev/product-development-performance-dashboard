@@ -19,7 +19,8 @@ export type QAFlagType =
   | 'complete_missing_story_points'
   | 'date_outside_sprint'
   | 'incomplete_missing_story_points'
-  | 'task_in_multiple_sprints';
+  | 'task_in_multiple_sprints'
+  | 'task_added_mid_sprint';
 
 /**
  * A single QA flag
@@ -29,7 +30,9 @@ export interface QAFlag {
   taskTitle: string;
   taskUrl?: string;
   assignee?: string;
-  date?: string;
+  status?: string;                         // task status: "Complete" | "Incomplete"
+  date?: string;                           // for date_outside_sprint: the completion date
+  dateAssigned?: string;                   // for task_added_mid_sprint: the assigned (creation) date
   sprintStart?: string;
   sprintEnd?: string;
   sprints?: string[];                      // for task_in_multiple_sprints: the OTHER sprints this task also appears in

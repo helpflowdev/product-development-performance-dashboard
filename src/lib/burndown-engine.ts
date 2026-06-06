@@ -136,6 +136,7 @@ export function computeBurndown(
           taskTitle: row.tasksTitle,
           taskUrl: row.linkToTask,
           assignee: row.assigneeName,
+          status: row.status,
         });
       }
       continue;
@@ -151,6 +152,7 @@ export function computeBurndown(
         taskTitle: row.tasksTitle,
         taskUrl: row.linkToTask,
         assignee: row.assigneeName,
+        status: row.status,
       });
       // Still count it with 0 points
     }
@@ -163,6 +165,7 @@ export function computeBurndown(
         taskTitle: row.tasksTitle,
         taskUrl: row.linkToTask,
         assignee: row.assigneeName,
+        status: row.status,
       });
       continue; // Skip if no date at all
     }
@@ -175,6 +178,8 @@ export function computeBurndown(
         type: 'date_outside_sprint',
         taskTitle: row.tasksTitle,
         taskUrl: row.linkToTask,
+        assignee: row.assigneeName,
+        status: row.status,
         date: dateStr,
         sprintStart: toDateString(startDate),
         sprintEnd: toDateString(endDate),
@@ -241,7 +246,24 @@ export function computeBurndown(
         taskTitle: row.tasksTitle,
         taskUrl: row.linkToTask,
         assignee: row.assigneeName,
+        status: row.status,
         sprints: otherSprints,
+      });
+    }
+  }
+
+  // Detect tasks added mid-sprint: "Date Assigned" (Asana creation date) falls
+  // after the sprint start date, i.e. scope added after the sprint kicked off.
+  for (const row of sprintRows) {
+    const assignedDate = parseDate(row.dateAssigned);
+    if (assignedDate && isDateAfter(assignedDate, startDate)) {
+      qaFlags.push({
+        type: 'task_added_mid_sprint',
+        taskTitle: row.tasksTitle,
+        taskUrl: row.linkToTask,
+        assignee: row.assigneeName,
+        status: row.status,
+        dateAssigned: toDateString(assignedDate),
       });
     }
   }

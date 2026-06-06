@@ -158,7 +158,7 @@ export default function BurndownPage() {
             {/* QA Log */}
             <Card>
               <h2 className="text-lg font-semibold text-white mb-4">Data Quality</h2>
-              <QALogPanel flags={burndownData.qaFlags} />
+              <QALogPanel flags={burndownData.qaFlags} sprintId={burndownData.sprintId} />
             </Card>
 
             {/* Footer */}
