@@ -12,10 +12,8 @@ export const DEV_MEMBERS: readonly string[] = [
   'Nikolay Zhidenko',
   'Gio Layugan',
   'JC Hsieh',
-  'Jun Levi Caligtan',
   'Karim Matolo',
   'Marion Faye Alexis Quimbo',
-  'Micah Marie Marcelo',
   'Shann Bryle Rubido',
   'Shierraine Lobederio',
 ];
