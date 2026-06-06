@@ -66,6 +66,18 @@ function taskKey(row: SprintRow): string {
 }
 
 /**
+ * Recurring-task markers: (DT) daily, (WT) weekly, (ST) sprintly. These tasks
+ * are planned, but a new instance is spawned mid-sprint whenever the previous one
+ * is completed — so their "Date Assigned" looks mid-sprint even though it isn't
+ * unplanned scope. Checked in both the Recurring Task column and the task title.
+ */
+const RECURRING_MARKER = /\((?:DT|WT|ST)\)/i;
+
+function isRecurringTask(row: SprintRow): boolean {
+  return RECURRING_MARKER.test(row.recurringTask) || RECURRING_MARKER.test(row.tasksTitle);
+}
+
+/**
  * Map each task to the set of distinct sprints it appears in, across ALL rows.
  * A task spanning more than one sprint was added/carried over to another sprint.
  */
@@ -254,7 +266,10 @@ export function computeBurndown(
 
   // Detect tasks added mid-sprint: "Date Assigned" (Asana creation date) falls
   // after the sprint start date, i.e. scope added after the sprint kicked off.
+  // Recurring tasks ((DT)/(WT)/(ST)) are excluded — they're planned, even though a
+  // fresh instance spawns mid-sprint each time the previous one is completed.
   for (const row of sprintRows) {
+    if (isRecurringTask(row)) continue;
     const assignedDate = parseDate(row.dateAssigned);
     if (assignedDate && isDateAfter(assignedDate, startDate)) {
       qaFlags.push({
