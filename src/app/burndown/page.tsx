@@ -85,6 +85,8 @@ export default function BurndownPage() {
             <SelectDropdown
               label="Allotted Points"
               options={[
+                { value: '1400', label: '1400 points' },
+                { value: '1500', label: '1500 points' },
                 { value: '1600', label: '1600 points' },
                 { value: '1800', label: '1800 points' },
                 { value: '2000', label: '2000 points' },
@@ -118,7 +120,7 @@ export default function BurndownPage() {
           <div className="space-y-6">
             {/* Summary Stats */}
             <Card>
-              <div className="grid grid-cols-3 gap-6">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
                 <div>
                   <p className="text-slate-300 text-sm">Total Allotted Points</p>
                   <p className="text-2xl font-bold text-white">{burndownData.allottedPoints}</p>
@@ -126,6 +128,10 @@ export default function BurndownPage() {
                 <div>
                   <p className="text-slate-300 text-sm">Total Consumed Points</p>
                   <p className="text-2xl font-bold text-cyan-400">{burndownData.totalConsumedPoints}</p>
+                </div>
+                <div>
+                  <p className="text-slate-300 text-sm">Expected Points / Day</p>
+                  <p className="text-2xl font-bold text-amber-400">{burndownData.dailyIdealBurn}</p>
                 </div>
                 <div>
                   <p className="text-slate-300 text-sm">Burndown Rate</p>
@@ -137,7 +143,11 @@ export default function BurndownPage() {
             {/* Chart */}
             <Card>
               <h2 className="text-lg font-semibold text-white mb-4">Burndown Trend</h2>
-              <BurndownChart data={burndownData.days} allottedPoints={burndownData.allottedPoints} />
+              <BurndownChart
+                data={burndownData.days}
+                allottedPoints={burndownData.allottedPoints}
+                sprintId={burndownData.sprintId}
+              />
             </Card>
 
             {/* Data Table */}

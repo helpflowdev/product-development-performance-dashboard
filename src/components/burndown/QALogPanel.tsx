@@ -22,7 +22,10 @@ export function QALogPanel({ flags }: QALogPanelProps) {
   const errorCount = flags.filter((f) => f.type === 'complete_missing_date').length;
   const warningCount = flags.filter((f) => f.type === 'date_outside_sprint').length;
   const infoCount = flags.filter(
-    (f) => f.type === 'incomplete_missing_story_points' || f.type === 'complete_missing_story_points'
+    (f) =>
+      f.type === 'incomplete_missing_story_points' ||
+      f.type === 'complete_missing_story_points' ||
+      f.type === 'task_in_multiple_sprints'
   ).length;
 
   if (flags.length === 0) {
@@ -97,7 +100,7 @@ export function QALogPanel({ flags }: QALogPanelProps) {
         )}
 
         {flagsByType['incomplete_missing_story_points'] && (
-          <details className="pb-3 border-white/10">
+          <details className="border-b border-white/10 pb-3">
             <summary className="cursor-pointer font-semibold text-cyan-400 hover:text-red-400">
               Incomplete missing story points ({flagsByType['incomplete_missing_story_points'].length})
             </summary>
@@ -105,6 +108,25 @@ export function QALogPanel({ flags }: QALogPanelProps) {
               {flagsByType['incomplete_missing_story_points'].map((flag, idx) => (
                 <li key={idx}>
                   • <TaskLink flag={flag} /> (<span className="text-red-400">{flag.assignee}</span>)
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
+
+        {flagsByType['task_in_multiple_sprints'] && (
+          <details className="pb-3 border-white/10">
+            <summary className="cursor-pointer font-semibold text-violet-400 hover:text-violet-300">
+              Tasks added to multiple sprints ({flagsByType['task_in_multiple_sprints'].length})
+            </summary>
+            <ul className="mt-2 space-y-1 text-sm text-slate-300">
+              {flagsByType['task_in_multiple_sprints'].map((flag, idx) => (
+                <li key={idx}>
+                  • <TaskLink flag={flag} />
+                  {flag.assignee && <span className="text-slate-400"> ({flag.assignee})</span>}
+                  {flag.sprints && flag.sprints.length > 0 && (
+                    <span className="text-violet-300"> — also in: {flag.sprints.join(', ')}</span>
+                  )}
                 </li>
               ))}
             </ul>

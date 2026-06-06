@@ -54,12 +54,42 @@ export function getUniqueSprints(rows: SprintRow[]): SprintMeta[] {
 }
 
 /**
+ * Build a unique key identifying an Asana task across sprints.
+ * The task permalink (Link to Task) is the reliable unique identifier — the
+ * same task synced into multiple sprint projects produces rows that share it.
+ * Falls back to the task title when a link is missing.
+ */
+function taskKey(row: SprintRow): string {
+  const link = row.linkToTask?.trim();
+  if (link) return link;
+  return row.tasksTitle?.trim() ?? '';
+}
+
+/**
+ * Map each task to the set of distinct sprints it appears in, across ALL rows.
+ * A task spanning more than one sprint was added/carried over to another sprint.
+ */
+function buildTaskSprintMap(allRows: SprintRow[]): Map<string, Set<string>> {
+  const map = new Map<string, Set<string>>();
+  for (const row of allRows) {
+    const key = taskKey(row);
+    const sprint = row.sprint?.trim();
+    if (!key || !sprint) continue;
+    if (!map.has(key)) map.set(key, new Set());
+    map.get(key)!.add(sprint);
+  }
+  return map;
+}
+
+/**
  * Main computation function
- * Takes filtered rows for a sprint, computes daily burndown, returns chart data + QA flags
+ * Takes filtered rows for a sprint, computes daily burndown, returns chart data + QA flags.
+ * `allRows` (all sprints' rows) is used to detect tasks that also belong to other sprints.
  */
 export function computeBurndown(
   sprintRows: SprintRow[],
-  allottedPoints: number
+  allottedPoints: number,
+  allRows: SprintRow[] = sprintRows
 ): Omit<BurndownResponse, 'sprintId' | 'computedAt'> {
   if (sprintRows.length === 0) {
     throw new Error('No tasks found for this sprint');
@@ -191,6 +221,31 @@ export function computeBurndown(
     dayIndex++;
   }
 
+  // Detect tasks in the selected sprint that also appear in other sprints
+  // (i.e. carried over / added to another sprint).
+  const currentSprint = firstRow.sprint?.trim();
+  const taskSprintMap = buildTaskSprintMap(allRows);
+  const seenTasks = new Set<string>();
+  for (const row of sprintRows) {
+    const key = taskKey(row);
+    if (!key || seenTasks.has(key)) continue;
+    seenTasks.add(key);
+
+    const sprintsForTask = taskSprintMap.get(key);
+    if (sprintsForTask && sprintsForTask.size > 1) {
+      const otherSprints = Array.from(sprintsForTask)
+        .filter((s) => s !== currentSprint)
+        .sort();
+      qaFlags.push({
+        type: 'task_in_multiple_sprints',
+        taskTitle: row.tasksTitle,
+        taskUrl: row.linkToTask,
+        assignee: row.assigneeName,
+        sprints: otherSprints,
+      });
+    }
+  }
+
   // Calculate burndown rate
   const burndownRate = ((totalConsumedPoints / allottedPoints) * 100).toFixed(2);
 
@@ -200,5 +255,6 @@ export function computeBurndown(
     qaFlags,
     totalConsumedPoints,
     burndownRate: `${burndownRate}%`,
+    dailyIdealBurn,
   };
 }

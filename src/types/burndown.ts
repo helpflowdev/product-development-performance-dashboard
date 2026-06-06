@@ -18,7 +18,8 @@ export type QAFlagType =
   | 'complete_missing_date'
   | 'complete_missing_story_points'
   | 'date_outside_sprint'
-  | 'incomplete_missing_story_points';
+  | 'incomplete_missing_story_points'
+  | 'task_in_multiple_sprints';
 
 /**
  * A single QA flag
@@ -31,6 +32,7 @@ export interface QAFlag {
   date?: string;
   sprintStart?: string;
   sprintEnd?: string;
+  sprints?: string[];                      // for task_in_multiple_sprints: the OTHER sprints this task also appears in
 }
 
 /**
@@ -43,6 +45,7 @@ export interface BurndownResponse {
   qaFlags: QAFlag[];
   totalConsumedPoints: number;
   burndownRate: string;                   // e.g. "96.17%"
+  dailyIdealBurn: number;                 // expected story points to burn per day
   computedAt: string;                     // ISO timestamp
 }
 

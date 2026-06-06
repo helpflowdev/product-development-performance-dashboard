@@ -42,8 +42,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    // Compute burndown
-    const result = computeBurndown(selectedSprintRows, body.allottedPoints);
+    // Compute burndown (pass all rows so cross-sprint tasks can be detected)
+    const result = computeBurndown(selectedSprintRows, body.allottedPoints, sprintRows);
 
     const response: BurndownResponse = {
       sprintId: body.sprintId,

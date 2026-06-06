@@ -10,50 +10,51 @@ import {
   Legend,
   ReferenceLine,
   ResponsiveContainer,
-  Label,
 } from 'recharts';
 import { BurndownDay } from '@/types/burndown';
 
 /**
- * Custom label renderer for chart dots showing the value
- * Shows labels on every other data point to avoid clutter
+ * Build a label renderer for chart dots showing the value on EVERY point.
+ * `position` offsets the label clear of the bullet so the two lines'
+ * labels don't overlap: the upper (actual) line labels sit above their dots,
+ * the lower (ideal) line labels sit below theirs.
  */
-function renderCustomLabel(props: any) {
-  const { x, y, value, index } = props;
-
-  // Only show label if it's a defined number
-  if (typeof value !== 'number') return null;
-
-  // Show label only on every other dot to reduce clutter
-  if (index % 2 !== 0) return null;
-
-  return (
-    <text
-      x={x}
-      y={y - 15}
-      fill="#94a3b8"
-      textAnchor="middle"
-      fontSize={12}
-      fontWeight={600}
-    >
-      {Math.round(value)}
-    </text>
-  );
+function makeLabelRenderer(color: string, position: 'above' | 'below') {
+  const dy = position === 'above' ? -16 : 20;
+  return function LabelRenderer(props: any) {
+    const { x, y, value } = props;
+    if (typeof value !== 'number') return null;
+    return (
+      <text
+        x={x}
+        y={y + dy}
+        fill={color}
+        textAnchor="middle"
+        fontSize={11}
+        fontWeight={600}
+      >
+        {Math.round(value)}
+      </text>
+    );
+  };
 }
 
 interface BurndownChartProps {
   data: BurndownDay[];
   allottedPoints: number;
+  sprintId?: string;
 }
 
-export function BurndownChart({ data, allottedPoints }: BurndownChartProps) {
+export function BurndownChart({ data, allottedPoints, sprintId }: BurndownChartProps) {
   if (data.length === 0) {
     return <div className="text-center text-slate-300 py-8">No data to display</div>;
   }
 
   return (
     <div className="w-full glass-card rounded-xl p-6">
-      <h2 className="text-lg font-semibold text-white mb-6">Burndown Trend</h2>
+      {sprintId && (
+        <h3 className="text-center text-lg font-bold text-cyan-300 mb-4">{sprintId}</h3>
+      )}
       <div style={{ width: '100%', height: 550 }}>
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart
@@ -110,15 +111,7 @@ export function BurndownChart({ data, allottedPoints }: BurndownChartProps) {
               strokeDasharray="8 4"
               name="Ideal Burn"
               dot={{ fill: '#f59e0b', r: 3.5 }}
-              label={(props: any) => {
-                const { x, y, value, index } = props;
-                if (typeof value !== 'number' || index % 2 !== 0) return null;
-                return (
-                  <text x={x} y={y - 15} fill="#ea8c55" textAnchor="middle" fontSize={11} fontWeight={500}>
-                    {Math.round(value)}
-                  </text>
-                );
-              }}
+              label={makeLabelRenderer('#ea8c55', 'below')}
               isAnimationActive={false}
             />
             {/* Actual Remaining Line (solid, cyan) — stops at today */}
@@ -129,15 +122,7 @@ export function BurndownChart({ data, allottedPoints }: BurndownChartProps) {
               strokeWidth={2.5}
               name="Actual Remaining"
               dot={{ fill: '#06b6d4', r: 3.5 }}
-              label={(props: any) => {
-                const { x, y, value, index } = props;
-                if (typeof value !== 'number' || index % 2 !== 0) return null;
-                return (
-                  <text x={x} y={y + 15} fill="#06b6d4" textAnchor="middle" fontSize={11} fontWeight={500}>
-                    {Math.round(value)}
-                  </text>
-                );
-              }}
+              label={makeLabelRenderer('#06b6d4', 'above')}
               activeDot={{ r: 5 }}
               isAnimationActive={false}
               connectNulls={false}
