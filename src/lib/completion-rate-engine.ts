@@ -74,13 +74,16 @@ export function computeSprintStats(rows: SprintRow[]): SprintCompletionStat[] {
   const uniqueSprints = getUniqueSprints(rows);
   const sprintMap = new Map(uniqueSprints.map((s) => [s.id, s]));
 
-  // Group rows by sprint and compute stats
-  const statsBySprint = new Map<string, { total: number; completed: number }>();
+  // Group rows by sprint and compute stats (also tally each sprint's Week label)
+  const statsBySprint = new Map<
+    string,
+    { total: number; completed: number; weeks: Map<string, number> }
+  >();
 
   for (const row of rows) {
     const sprintId = row.sprint;
     if (!statsBySprint.has(sprintId)) {
-      statsBySprint.set(sprintId, { total: 0, completed: 0 });
+      statsBySprint.set(sprintId, { total: 0, completed: 0, weeks: new Map() });
     }
 
     const stat = statsBySprint.get(sprintId)!;
@@ -88,6 +91,8 @@ export function computeSprintStats(rows: SprintRow[]): SprintCompletionStat[] {
     if (isCompleted(row)) {
       stat.completed += 1;
     }
+    const wk = row.week?.trim();
+    if (wk) stat.weeks.set(wk, (stat.weeks.get(wk) ?? 0) + 1);
   }
 
   // Convert to SprintCompletionStat array
@@ -98,10 +103,21 @@ export function computeSprintStats(rows: SprintRow[]): SprintCompletionStat[] {
 
     const completionRate = stat.total > 0 ? (stat.completed / stat.total) * 100 : 0;
 
+    // Most common Week label among the sprint's rows (the sheet's "Week" column)
+    let week: string | undefined;
+    let maxWeekCount = 0;
+    for (const [wk, count] of stat.weeks) {
+      if (count > maxWeekCount) {
+        maxWeekCount = count;
+        week = wk;
+      }
+    }
+
     results.push({
       sprintId,
       sprintStartDate: meta.startDate,
       sprintEndDate: meta.endDate,
+      week,
       total: stat.total,
       completed: stat.completed,
       completionRate: Math.round(completionRate * 100) / 100,

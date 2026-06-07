@@ -185,6 +185,7 @@ export function YTDSprintTable({ sprints, groupByMonth = false }: YTDSprintTable
               <th className="px-4 py-3 text-left text-sm font-semibold text-cyan-300">
                 {groupByMonth ? 'Month / Sprint' : 'Sprint'}
               </th>
+              <th className="px-4 py-3 text-left text-sm font-semibold text-cyan-300">Week</th>
               <th className="px-4 py-3 text-left text-sm font-semibold text-cyan-300">Period</th>
               <th className="px-4 py-3 text-center text-sm font-semibold text-cyan-300">Total Tasks</th>
               <th className="px-4 py-3 text-center text-sm font-semibold text-cyan-300">Completed Tasks</th>
@@ -197,6 +198,9 @@ export function YTDSprintTable({ sprints, groupByMonth = false }: YTDSprintTable
                 <tr key={sprint.sprintId} className={idx % 2 === 0 ? 'bg-transparent' : 'bg-white/3'}>
                   <td className="px-4 py-3 text-sm text-slate-200 border-b border-white/10">
                     {sprint.sprintId}
+                  </td>
+                  <td className="px-4 py-3 text-sm text-slate-300 border-b border-white/10">
+                    {sprint.week || '—'}
                   </td>
                   <td className="px-4 py-3 text-sm text-slate-300 border-b border-white/10">
                     {formatDateRange(sprint.sprintStartDate, sprint.sprintEndDate)}
@@ -227,6 +231,7 @@ export function YTDSprintTable({ sprints, groupByMonth = false }: YTDSprintTable
                     className="border-b border-white/10 bg-white/[0.06]"
                   >
                     <td className="px-4 py-3 text-sm text-white font-semibold">{group.label}</td>
+                    <td className="px-4 py-3 text-sm text-slate-400"></td>
                     <td className="px-4 py-3 text-sm text-slate-400">
                       {group.sprints.length} sprint{group.sprints.length === 1 ? '' : 's'}
                     </td>
@@ -251,6 +256,7 @@ export function YTDSprintTable({ sprints, groupByMonth = false }: YTDSprintTable
                       className="border-b border-white/5"
                     >
                       <td className="px-4 py-3 text-sm text-slate-300 pl-12">{sprint.sprintId}</td>
+                      <td className="px-4 py-3 text-sm text-slate-400">{sprint.week || '—'}</td>
                       <td className="px-4 py-3 text-sm text-slate-400">
                         {formatDateRange(sprint.sprintStartDate, sprint.sprintEndDate)}
                       </td>
