@@ -10,6 +10,7 @@ import { GenerateButton } from '@/components/burndown/GenerateButton';
 import { BurndownChart } from '@/components/burndown/BurndownChart';
 import { BurndownTable } from '@/components/burndown/BurndownTable';
 import { QALogPanel } from '@/components/burndown/QALogPanel';
+import { BurndownInfoButton } from '@/components/burndown/BurndownInfoButton';
 
 export default function BurndownPage() {
   const [sprints, setSprints] = useState<SprintMeta[]>([]);
@@ -69,7 +70,10 @@ export default function BurndownPage() {
   return (
     <div className="flex-1 p-6 overflow-auto">
       <div className="max-w-6xl mx-auto">
-        <h1 className="text-xl font-bold text-white mb-8">Sprint Burndown Chart</h1>
+        <div className="flex items-center justify-between mb-8">
+          <h1 className="text-xl font-bold text-white">Sprint Burndown Chart</h1>
+          <BurndownInfoButton />
+        </div>
 
         {/* Input Card */}
         <Card className="mb-6">
