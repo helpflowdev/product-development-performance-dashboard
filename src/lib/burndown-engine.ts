@@ -268,10 +268,12 @@ export function computeBurndown(
   // after the sprint start date, i.e. scope added after the sprint kicked off.
   // Recurring tasks ((DT)/(WT)/(ST)) are excluded — they're planned, even though a
   // fresh instance spawns mid-sprint each time the previous one is completed.
+  let addedPoints = 0;
   for (const row of sprintRows) {
     if (isRecurringTask(row)) continue;
     const assignedDate = parseDate(row.dateAssigned);
     if (assignedDate && isDateAfter(assignedDate, startDate)) {
+      addedPoints += parseFloat(row.storyPoints) || 0;
       qaFlags.push({
         type: 'task_added_mid_sprint',
         taskTitle: row.tasksTitle,
@@ -308,6 +310,7 @@ export function computeBurndown(
 
   return {
     allottedPoints,
+    addedPoints,
     days,
     qaFlags,
     totalConsumedPoints,

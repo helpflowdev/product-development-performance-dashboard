@@ -44,6 +44,7 @@ export interface QAFlag {
 export interface BurndownResponse {
   sprintId: string;
   allottedPoints: number;
+  addedPoints: number;                    // story points of tasks added after sprint start (recurring excluded)
   days: BurndownDay[];
   qaFlags: QAFlag[];
   totalConsumedPoints: number;
