@@ -252,6 +252,9 @@ export async function syncSprintData(
         const TIME_BUDGET_MS = 48_000;
         const CONCURRENCY = 5; // parallel activity-log lookups; stays under Asana's rate limit
         let done = 0;
+        let noEvent = 0; // call succeeded but the task has no matching add-event
+        let errors = 0; // the lookup call failed (auth/scope/rate-limit)
+        let lastError = '';
         let budgetReached = false;
         let batchIdx = 0;
 
@@ -261,12 +264,18 @@ export async function syncSprintData(
             break;
           }
           const batch = lookups.slice(start, start + CONCURRENCY);
-          const dates = await Promise.all(
+          const results = await Promise.all(
             batch.map((b) => fetchTaskAddedToProjectDate(b.gid, projectInfo.title)),
           );
-          const writes = batch
-            .map((b, idx) => ({ rowNumber: b.rowNumber, value: dates[idx] }))
-            .filter((w) => w.value);
+          const writes: Array<{ rowNumber: number; value: string }> = [];
+          batch.forEach((b, idx) => {
+            const r = results[idx];
+            if (r.date) writes.push({ rowNumber: b.rowNumber, value: r.date });
+            else if (r.error) {
+              errors++;
+              lastError = r.error;
+            } else noEvent++;
+          });
           if (writes.length > 0) {
             await batchUpdateColumnX(writes);
             result.datesFilled += writes.length;
@@ -276,14 +285,15 @@ export async function syncSprintData(
           await new Promise((r) => setTimeout(r, 50)); // smooth out the request rate
         }
 
+        // Report a breakdown so a 0-fill run reveals *why* (no events vs. failures).
         const left = lookups.length - done;
-        if (budgetReached && left > 0) {
-          log(
-            `Filled ${result.datesFilled} value(s); ${left} task(s) left — run Sync again to finish.`,
-          );
-        } else {
-          log(`Filled ${result.datesFilled} "Date Added to Sprint" value(s).`);
+        const parts = [`Filled ${result.datesFilled}`];
+        if (noEvent > 0) parts.push(`${noEvent} had no add-event`);
+        if (errors > 0) {
+          parts.push(`${errors} lookup error(s)${lastError ? ` (last: ${lastError})` : ''}`);
         }
+        if (budgetReached && left > 0) parts.push(`${left} left — run Sync again to finish`);
+        log(parts.join('; ') + '.');
       }
     } catch (err) {
       // Non-fatal: the A–L sync already succeeded; X backfill resumes next run.

@@ -167,6 +167,17 @@ export async function getProjectDetails(
 }
 
 /**
+ * Outcome of an added-to-project lookup. `date` is '' unless a matching event
+ * was found. `error` is set only when the lookup call itself failed — this lets
+ * the caller distinguish "this task genuinely has no add-event" (date '', no
+ * error) from "the API call failed" (error set), which otherwise look identical.
+ */
+export interface AddedDateResult {
+  date: string;
+  error?: string;
+}
+
+/**
  * Find when a task was added to a specific project ("Date Added to Sprint").
  *
  * Asana's task fetch doesn't expose project-membership dates, so we read the
@@ -174,49 +185,57 @@ export async function getProjectDetails(
  * that references this project. Stories come back oldest-first, so the early
  * "added to project" event is reliably within the first page.
  *
- * Returns MM/DD/YYYY (timezone-formatted), or '' if it can't be determined.
- * Never throws — a single task's failure must not abort the whole sync.
- * The caller (sync-engine) paces these in bounded concurrent batches, so this
- * function itself does no rate-limit sleeping.
+ * Never throws. Retries once on HTTP 429 honoring Retry-After. The caller
+ * (sync-engine) paces these in bounded concurrent batches.
  */
 export async function fetchTaskAddedToProjectDate(
   taskGid: string,
   projectTitle: string,
-): Promise<string> {
-  try {
-    const url = `${ASANA_BASE_URL}/tasks/${taskGid}/stories?opt_fields=resource_subtype,created_at,text&limit=100`;
-    const response = await fetch(url, { method: 'GET', headers: getHeaders() });
+): Promise<AddedDateResult> {
+  const url = `${ASANA_BASE_URL}/tasks/${taskGid}/stories?opt_fields=resource_subtype,created_at,text&limit=100`;
 
-    if (!response.ok) return '';
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const response = await fetch(url, { method: 'GET', headers: getHeaders() });
 
-    const stories = ((await response.json()).data ?? []) as Array<{
-      resource_subtype?: string;
-      created_at: string;
-      text?: string;
-    }>;
+      if (response.status === 429 && attempt === 0) {
+        const retryAfter = Number(response.headers.get('Retry-After')) || 1;
+        await sleep(Math.min(retryAfter, 5) * 1000);
+        continue; // retry once
+      }
+      if (!response.ok) return { date: '', error: `HTTP ${response.status}` };
 
-    const additions = stories.filter(
-      (s) => s.resource_subtype === 'added_to_project',
-    );
+      const stories = ((await response.json()).data ?? []) as Array<{
+        resource_subtype?: string;
+        created_at: string;
+        text?: string;
+      }>;
 
-    // Prefer the addition story that names THIS project (a task can belong to
-    // several projects). Fall back to the sole addition story if there's only
-    // one — story text phrasing varies across Asana versions.
-    let candidates = additions.filter((s) => s.text?.includes(projectTitle));
-    if (candidates.length === 0 && additions.length === 1) {
-      candidates = additions;
+      const additions = stories.filter(
+        (s) => s.resource_subtype === 'added_to_project',
+      );
+
+      // Prefer the addition story that names THIS project (a task can belong to
+      // several projects). Fall back to the sole addition story if there's only
+      // one — story text phrasing varies across Asana versions.
+      let candidates = additions.filter((s) => s.text?.includes(projectTitle));
+      if (candidates.length === 0 && additions.length === 1) {
+        candidates = additions;
+      }
+      if (candidates.length === 0) return { date: '' }; // no add-event for this task
+
+      // Most recent addition wins (handles remove → re-add to the same project).
+      const latest = candidates.reduce((a, b) =>
+        new Date(a.created_at) > new Date(b.created_at) ? a : b,
+      );
+
+      return { date: formatDateOnly(latest.created_at) };
+    } catch (e) {
+      return { date: '', error: String(e) };
     }
-    if (candidates.length === 0) return '';
-
-    // Most recent addition wins (handles remove → re-add to the same project).
-    const latest = candidates.reduce((a, b) =>
-      new Date(a.created_at) > new Date(b.created_at) ? a : b,
-    );
-
-    return formatDateOnly(latest.created_at);
-  } catch {
-    return '';
   }
+
+  return { date: '', error: 'HTTP 429 (retries exhausted)' };
 }
 
 /**
