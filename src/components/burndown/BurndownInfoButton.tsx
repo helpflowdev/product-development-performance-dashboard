@@ -28,6 +28,10 @@ const SECTIONS: InfoSection[] = [
         desc: 'The planned story-point budget for the sprint (chosen from the dropdown).',
       },
       {
+        term: 'Total Points (completed + incomplete)',
+        desc: 'The sum of story points across every task in the sprint, done or not — the actual running scope. Compare it against Total Allotted to see over- or under-commitment.',
+      },
+      {
         term: 'Added Points (mid-sprint)',
         desc: 'Total story points of tasks pulled into the sprint after it started — a measure of added scope. Recurring tasks are not counted.',
       },

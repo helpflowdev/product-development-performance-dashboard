@@ -48,6 +48,7 @@ export interface BurndownResponse {
   sprintId: string;
   allottedPoints: number;
   addedPoints: number;                    // story points of tasks added after sprint start (recurring excluded)
+  totalSprintPoints: number;              // sum of ALL tasks' story points (completed + incomplete) — actual running scope
   days: BurndownDay[];
   qaFlags: QAFlag[];
   totalConsumedPoints: number;

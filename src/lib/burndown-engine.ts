@@ -297,6 +297,14 @@ export function computeBurndown(
     }
   }
 
+  // Total story points actually in the sprint — every task, completed AND
+  // incomplete. This is the running scope: compare it against allottedPoints to
+  // see over/under-commitment, with addedPoints and totalConsumedPoints alongside.
+  const totalSprintPoints =
+    Math.round(
+      sprintRows.reduce((sum, row) => sum + (parseFloat(row.storyPoints) || 0), 0) * 100,
+    ) / 100;
+
   // Calculate burndown rate (overall): progress toward the full sprint allotment.
   const burndownRate = ((totalConsumedPoints / allottedPoints) * 100).toFixed(2);
 
@@ -323,6 +331,7 @@ export function computeBurndown(
   return {
     allottedPoints,
     addedPoints,
+    totalSprintPoints,
     days,
     qaFlags,
     totalConsumedPoints,
