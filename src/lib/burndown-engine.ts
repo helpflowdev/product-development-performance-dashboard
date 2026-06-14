@@ -1,5 +1,5 @@
 import { SprintRow, SprintMeta } from '@/types/sprint';
-import { BurndownDay, BurndownResponse, QAFlag, QAFlagType } from '@/types/burndown';
+import { BurndownDay, BurndownResponse, QAFlag } from '@/types/burndown';
 import {
   parseDate,
   toDateString,
@@ -32,6 +32,22 @@ function resolveBurndownDate(row: SprintRow): Date | null {
  */
 function resolveSprintEntryDate(row: SprintRow): Date | null {
   return parseDate(row.dateAddedToSprint) ?? parseDate(row.dateAssigned);
+}
+
+/**
+ * Common fields every QA flag carries: task identity, status, and the
+ * hours/story-point figures shown as columns in the Data Quality panel.
+ */
+function flagBase(row: SprintRow) {
+  return {
+    taskTitle: row.tasksTitle,
+    taskUrl: row.linkToTask,
+    assignee: row.assigneeName,
+    status: row.status,
+    storyPoints: row.storyPoints,
+    hoursEstimate: row.hoursEstimate,
+    hoursActual: row.hoursActual,
+  };
 }
 
 /**
@@ -156,10 +172,7 @@ export function computeBurndown(
       if (row.storyPoints.trim() === '' || isNaN(parseFloat(row.storyPoints))) {
         qaFlags.push({
           type: 'incomplete_missing_story_points',
-          taskTitle: row.tasksTitle,
-          taskUrl: row.linkToTask,
-          assignee: row.assigneeName,
-          status: row.status,
+          ...flagBase(row),
         });
       }
       continue;
@@ -172,10 +185,7 @@ export function computeBurndown(
     if (row.storyPoints.trim() === '' || isNaN(parseFloat(row.storyPoints))) {
       qaFlags.push({
         type: 'complete_missing_story_points',
-        taskTitle: row.tasksTitle,
-        taskUrl: row.linkToTask,
-        assignee: row.assigneeName,
-        status: row.status,
+        ...flagBase(row),
       });
       // Still count it with 0 points
     }
@@ -185,10 +195,7 @@ export function computeBurndown(
     if (!burndownDate) {
       qaFlags.push({
         type: 'complete_missing_date',
-        taskTitle: row.tasksTitle,
-        taskUrl: row.linkToTask,
-        assignee: row.assigneeName,
-        status: row.status,
+        ...flagBase(row),
       });
       continue; // Skip if no date at all
     }
@@ -199,10 +206,7 @@ export function computeBurndown(
     if (isDateBefore(burndownDate, startDate) || isDateAfter(burndownDate, endDate)) {
       qaFlags.push({
         type: 'date_outside_sprint',
-        taskTitle: row.tasksTitle,
-        taskUrl: row.linkToTask,
-        assignee: row.assigneeName,
-        status: row.status,
+        ...flagBase(row),
         date: dateStr,
         sprintStart: toDateString(startDate),
         sprintEnd: toDateString(endDate),
@@ -220,7 +224,7 @@ export function computeBurndown(
   const days: BurndownDay[] = [];
   let cumulativeCompleted = 0;
   let dayIndex = 0;
-  let cursor = new Date(startDate);
+  const cursor = new Date(startDate);
 
   while (cursor <= rangeEnd) {
     const dateStr = toDateString(cursor);
@@ -266,10 +270,7 @@ export function computeBurndown(
         .sort();
       qaFlags.push({
         type: 'task_in_multiple_sprints',
-        taskTitle: row.tasksTitle,
-        taskUrl: row.linkToTask,
-        assignee: row.assigneeName,
-        status: row.status,
+        ...flagBase(row),
         sprints: otherSprints,
       });
     }
@@ -290,10 +291,7 @@ export function computeBurndown(
       addedPoints += parseFloat(row.storyPoints) || 0;
       qaFlags.push({
         type: 'task_added_mid_sprint',
-        taskTitle: row.tasksTitle,
-        taskUrl: row.linkToTask,
-        assignee: row.assigneeName,
-        status: row.status,
+        ...flagBase(row),
         dateAddedToSprint: toDateString(entryDate),
       });
     }

@@ -31,6 +31,9 @@ export interface QAFlag {
   taskUrl?: string;
   assignee?: string;
   status?: string;                         // task status: "Complete" | "Incomplete"
+  storyPoints?: string;                    // raw Story Points cell (may be blank)
+  hoursEstimate?: string;                  // raw Hrs Estimated cell (may be blank)
+  hoursActual?: string;                    // raw Hrs Actual cell (may be blank)
   date?: string;                           // for date_outside_sprint: the completion date
   dateAddedToSprint?: string;              // for task_added_mid_sprint: when the task entered the sprint
   sprintStart?: string;

@@ -150,7 +150,7 @@ export function QALogPanel({ flags, sprintId }: QALogPanelProps) {
 
   // Combined CSV across every section
   function downloadAll() {
-    const headers = ['Issue', 'Task Title', 'Task Link', 'Assignee', 'Status', 'Detail'];
+    const headers = ['Issue', 'Task Title', 'Task Link', 'Assignee', 'Status', 'Est Hours', 'Actual Hours', 'Story Points', 'Detail'];
     const rows: string[][] = [];
     for (const section of sectionsPresent) {
       for (const f of flagsByType[section.type]) {
@@ -160,6 +160,9 @@ export function QALogPanel({ flags, sprintId }: QALogPanelProps) {
           f.taskUrl ?? '',
           f.assignee ?? '',
           f.status ?? '',
+          f.hoursEstimate ?? '',
+          f.hoursActual ?? '',
+          f.storyPoints ?? '',
           section.extraValue ? section.extraValue(f) : '',
         ]);
       }
@@ -169,10 +172,18 @@ export function QALogPanel({ flags, sprintId }: QALogPanelProps) {
 
   // Per-section CSV
   function downloadSection(section: SectionDef) {
-    const headers = ['Task Title', 'Task Link', 'Assignee', 'Status'];
+    const headers = ['Task Title', 'Task Link', 'Assignee', 'Status', 'Est Hours', 'Actual Hours', 'Story Points'];
     if (section.extraHeader) headers.push(section.extraHeader);
     const rows = flagsByType[section.type].map((f) => {
-      const base = [f.taskTitle ?? '', f.taskUrl ?? '', f.assignee ?? '', f.status ?? ''];
+      const base = [
+        f.taskTitle ?? '',
+        f.taskUrl ?? '',
+        f.assignee ?? '',
+        f.status ?? '',
+        f.hoursEstimate ?? '',
+        f.hoursActual ?? '',
+        f.storyPoints ?? '',
+      ];
       if (section.extraHeader) base.push(section.extraValue ? section.extraValue(f) : '');
       return base;
     });
@@ -224,6 +235,9 @@ export function QALogPanel({ flags, sprintId }: QALogPanelProps) {
                       <th className="px-4 py-2 font-semibold text-cyan-300">Task</th>
                       <th className="px-4 py-2 font-semibold text-cyan-300">Assignee</th>
                       <th className="px-4 py-2 font-semibold text-cyan-300">Status</th>
+                      <th className="px-4 py-2 font-semibold text-cyan-300">Est Hours</th>
+                      <th className="px-4 py-2 font-semibold text-cyan-300">Actual Hours</th>
+                      <th className="px-4 py-2 font-semibold text-cyan-300">Story Points</th>
                       {section.extraHeader && (
                         <th className="px-4 py-2 font-semibold text-cyan-300">{section.extraHeader}</th>
                       )}
@@ -240,6 +254,15 @@ export function QALogPanel({ flags, sprintId }: QALogPanelProps) {
                         </td>
                         <td className="px-4 py-2 border-b border-white/5">
                           <StatusPill status={flag.status} />
+                        </td>
+                        <td className="px-4 py-2 border-b border-white/5 text-slate-300">
+                          {flag.hoursEstimate?.trim() || '—'}
+                        </td>
+                        <td className="px-4 py-2 border-b border-white/5 text-slate-300">
+                          {flag.hoursActual?.trim() || '—'}
+                        </td>
+                        <td className="px-4 py-2 border-b border-white/5 text-slate-300">
+                          {flag.storyPoints?.trim() || '—'}
                         </td>
                         {section.extraHeader && (
                           <td className="px-4 py-2 border-b border-white/5 text-slate-300">
