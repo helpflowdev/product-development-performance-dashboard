@@ -120,7 +120,7 @@ export default function BurndownPage() {
           <div className="space-y-6">
             {/* Summary Stats */}
             <Card>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-6">
                 <div>
                   <p className="text-slate-300 text-sm">Total Allotted Points</p>
                   <p className="text-2xl font-bold text-white">{burndownData.allottedPoints}</p>
@@ -134,8 +134,20 @@ export default function BurndownPage() {
                   <p className="text-2xl font-bold text-amber-400">{burndownData.dailyIdealBurn}</p>
                 </div>
                 <div>
-                  <p className="text-slate-300 text-sm">Burndown Rate</p>
+                  <p className="text-slate-300 text-sm">
+                    Burndown Rate
+                    <span className="block text-xs text-slate-400">(overall)</span>
+                  </p>
                   <p className="text-2xl font-bold text-emerald-400">{burndownData.burndownRate}</p>
+                </div>
+                <div>
+                  <p className="text-slate-300 text-sm">
+                    Burndown Rate
+                    <span className="block text-xs text-slate-400">(up to date)</span>
+                  </p>
+                  <p className="text-2xl font-bold text-sky-400">
+                    {burndownData.burndownRateToDate ?? '—'}
+                  </p>
                 </div>
               </div>
             </Card>

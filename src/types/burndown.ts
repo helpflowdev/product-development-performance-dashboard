@@ -47,7 +47,8 @@ export interface BurndownResponse {
   days: BurndownDay[];
   qaFlags: QAFlag[];
   totalConsumedPoints: number;
-  burndownRate: string;                   // e.g. "96.17%"
+  burndownRate: string;                   // overall: consumed ÷ full allotment, e.g. "96.17%"
+  burndownRateToDate: string | null;      // up to date: consumed ÷ ideal-expected-by-today; null before sprint starts
   dailyIdealBurn: number;                 // expected story points to burn per day
   computedAt: string;                     // ISO timestamp
 }

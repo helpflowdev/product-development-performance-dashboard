@@ -283,8 +283,28 @@ export function computeBurndown(
     }
   }
 
-  // Calculate burndown rate
+  // Calculate burndown rate (overall): progress toward the full sprint allotment.
   const burndownRate = ((totalConsumedPoints / allottedPoints) * 100).toFixed(2);
+
+  // Calculate burndown rate (up to date): pace vs. where the team *should* be
+  // today. The denominator is the ideal cumulative burn expected by today, not
+  // the full allotment — so being "on pace" reads ~100% even mid-sprint.
+  // Before the sprint starts there's no expectation yet (null → shown as "—");
+  // on/after the last day the expectation is the full allotment, so this
+  // converges to the overall rate.
+  let expectedConsumedToDate: number;
+  if (isDateBefore(today, startDate)) {
+    expectedConsumedToDate = 0;
+  } else if (!isDateBefore(today, endDate)) {
+    expectedConsumedToDate = allottedPoints;
+  } else {
+    const elapsedDays = daysBetween(startDate, today);
+    expectedConsumedToDate = Math.min(elapsedDays * dailyIdealBurn, allottedPoints);
+  }
+  const burndownRateToDate =
+    expectedConsumedToDate > 0
+      ? `${((totalConsumedPoints / expectedConsumedToDate) * 100).toFixed(2)}%`
+      : null;
 
   return {
     allottedPoints,
@@ -292,6 +312,7 @@ export function computeBurndown(
     qaFlags,
     totalConsumedPoints,
     burndownRate: `${burndownRate}%`,
+    burndownRateToDate,
     dailyIdealBurn,
   };
 }
