@@ -176,7 +176,8 @@ export async function getProjectDetails(
  *
  * Returns MM/DD/YYYY (timezone-formatted), or '' if it can't be determined.
  * Never throws — a single task's failure must not abort the whole sync.
- * Sleeps once before returning so sequential callers are naturally rate-limited.
+ * The caller (sync-engine) paces these in bounded concurrent batches, so this
+ * function itself does no rate-limit sleeping.
  */
 export async function fetchTaskAddedToProjectDate(
   taskGid: string,
@@ -215,8 +216,6 @@ export async function fetchTaskAddedToProjectDate(
     return formatDateOnly(latest.created_at);
   } catch {
     return '';
-  } finally {
-    await sleep(RATE_LIMIT_DELAY_MS);
   }
 }
 

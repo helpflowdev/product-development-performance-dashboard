@@ -246,26 +246,44 @@ export async function syncSprintData(
 
       if (lookups.length > 0) {
         log(`Resolving "Date Added to Sprint" for ${lookups.length} task(s)...`);
-        const FLUSH_EVERY = 25;
-        let pending: Array<{ rowNumber: number; value: string }> = [];
+        // The serverless route caps at 60s. Stop well before that — flushing
+        // each batch as we go — so a large first backfill ends cleanly and
+        // simply resumes on the next Sync (already-filled rows are skipped).
+        const TIME_BUDGET_MS = 48_000;
+        const CONCURRENCY = 5; // parallel activity-log lookups; stays under Asana's rate limit
         let done = 0;
+        let budgetReached = false;
+        let batchIdx = 0;
 
-        for (const { rowNumber, gid } of lookups) {
-          const date = await fetchTaskAddedToProjectDate(gid, projectInfo.title);
-          done++;
-          if (date) pending.push({ rowNumber, value: date });
-          if (pending.length >= FLUSH_EVERY) {
-            await batchUpdateColumnX(pending);
-            result.datesFilled += pending.length;
-            pending = [];
+        for (let start = 0; start < lookups.length; start += CONCURRENCY) {
+          if (Date.now() - startTime > TIME_BUDGET_MS) {
+            budgetReached = true;
+            break;
           }
-          if (done % 10 === 0) log(`  ...resolved ${done}/${lookups.length}`);
+          const batch = lookups.slice(start, start + CONCURRENCY);
+          const dates = await Promise.all(
+            batch.map((b) => fetchTaskAddedToProjectDate(b.gid, projectInfo.title)),
+          );
+          const writes = batch
+            .map((b, idx) => ({ rowNumber: b.rowNumber, value: dates[idx] }))
+            .filter((w) => w.value);
+          if (writes.length > 0) {
+            await batchUpdateColumnX(writes);
+            result.datesFilled += writes.length;
+          }
+          done += batch.length;
+          if (++batchIdx % 5 === 0) log(`  ...resolved ${done}/${lookups.length}`);
+          await new Promise((r) => setTimeout(r, 50)); // smooth out the request rate
         }
-        if (pending.length > 0) {
-          await batchUpdateColumnX(pending);
-          result.datesFilled += pending.length;
+
+        const left = lookups.length - done;
+        if (budgetReached && left > 0) {
+          log(
+            `Filled ${result.datesFilled} value(s); ${left} task(s) left — run Sync again to finish.`,
+          );
+        } else {
+          log(`Filled ${result.datesFilled} "Date Added to Sprint" value(s).`);
         }
-        log(`Filled ${result.datesFilled} "Date Added to Sprint" value(s).`);
       }
     } catch (err) {
       // Non-fatal: the A–L sync already succeeded; X backfill resumes next run.
