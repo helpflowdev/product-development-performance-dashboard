@@ -26,6 +26,7 @@ export interface SprintRow {
   role: string;                            // "Developer" | "QA Tester" | "Product Specialist" etc.
   dateCompletedForBurndown: string;        // M/D/YYYY — PRIMARY date used for burndown
   carriedOver: string;
+  dateAddedToSprint: string;               // MM/DD/YYYY — when the task entered THIS sprint (from Asana activity log); blank until backfilled
 }
 
 /**

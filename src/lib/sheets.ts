@@ -62,7 +62,7 @@ export async function fetchSheetRows(): Promise<string[][]> {
     const sheets = google.sheets({ version: 'v4', auth: getReadAuth() });
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId: process.env.GOOGLE_SHEET_ID!,
-      range: process.env.GOOGLE_SHEET_RANGE ?? 'Sprints!A:W',
+      range: process.env.GOOGLE_SHEET_RANGE ?? 'Sprints!A:X',
     });
 
     const rows = response.data.values ?? [];
@@ -97,7 +97,7 @@ export async function fetchSheetRowsForSync(): Promise<string[][]> {
   const sheets = getWriteClient();
   const response = await sheets.spreadsheets.values.get({
     spreadsheetId: process.env.GOOGLE_SHEET_ID!,
-    range: `'${SHEET_NAME}'!A:W`,
+    range: `'${SHEET_NAME}'!A:X`,
   });
   return response.data.values ?? [];
 }
@@ -135,6 +135,29 @@ export async function batchUpdateSheetRows(
       data: updates.map((u) => ({
         range: `'${SHEET_NAME}'!A${u.rowNumber}:L${u.rowNumber}`,
         values: [u.values],
+      })),
+    },
+  });
+}
+
+/**
+ * Write single cells in column X ("Date Added to Sprint") for the given rows.
+ * Targets only column X so the formula columns M–W are never touched.
+ * Each entry: { rowNumber (1-based), value }.
+ */
+export async function batchUpdateColumnX(
+  updates: Array<{ rowNumber: number; value: string }>,
+): Promise<void> {
+  if (updates.length === 0) return;
+
+  const sheets = getWriteClient();
+  await sheets.spreadsheets.values.batchUpdate({
+    spreadsheetId: process.env.GOOGLE_SHEET_ID!,
+    requestBody: {
+      valueInputOption: 'USER_ENTERED',
+      data: updates.map((u) => ({
+        range: `'${SHEET_NAME}'!X${u.rowNumber}`,
+        values: [[u.value]],
       })),
     },
   });

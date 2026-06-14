@@ -45,8 +45,8 @@ const SECTIONS: SectionDef[] = [
     title: 'Tasks added mid-sprint',
     color: 'text-amber-400',
     severity: 'warning',
-    extraHeader: 'Date Assigned',
-    extraValue: (f) => f.dateAssigned ?? '',
+    extraHeader: 'Date Added to Sprint',
+    extraValue: (f) => f.dateAddedToSprint ?? '',
   },
   {
     type: 'task_in_multiple_sprints',

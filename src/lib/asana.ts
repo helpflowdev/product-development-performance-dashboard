@@ -167,6 +167,60 @@ export async function getProjectDetails(
 }
 
 /**
+ * Find when a task was added to a specific project ("Date Added to Sprint").
+ *
+ * Asana's task fetch doesn't expose project-membership dates, so we read the
+ * task's stories (activity log) and find the `added_to_project` system story
+ * that references this project. Stories come back oldest-first, so the early
+ * "added to project" event is reliably within the first page.
+ *
+ * Returns MM/DD/YYYY (timezone-formatted), or '' if it can't be determined.
+ * Never throws — a single task's failure must not abort the whole sync.
+ * Sleeps once before returning so sequential callers are naturally rate-limited.
+ */
+export async function fetchTaskAddedToProjectDate(
+  taskGid: string,
+  projectTitle: string,
+): Promise<string> {
+  try {
+    const url = `${ASANA_BASE_URL}/tasks/${taskGid}/stories?opt_fields=resource_subtype,created_at,text&limit=100`;
+    const response = await fetch(url, { method: 'GET', headers: getHeaders() });
+
+    if (!response.ok) return '';
+
+    const stories = ((await response.json()).data ?? []) as Array<{
+      resource_subtype?: string;
+      created_at: string;
+      text?: string;
+    }>;
+
+    const additions = stories.filter(
+      (s) => s.resource_subtype === 'added_to_project',
+    );
+
+    // Prefer the addition story that names THIS project (a task can belong to
+    // several projects). Fall back to the sole addition story if there's only
+    // one — story text phrasing varies across Asana versions.
+    let candidates = additions.filter((s) => s.text?.includes(projectTitle));
+    if (candidates.length === 0 && additions.length === 1) {
+      candidates = additions;
+    }
+    if (candidates.length === 0) return '';
+
+    // Most recent addition wins (handles remove → re-add to the same project).
+    const latest = candidates.reduce((a, b) =>
+      new Date(a.created_at) > new Date(b.created_at) ? a : b,
+    );
+
+    return formatDateOnly(latest.created_at);
+  } catch {
+    return '';
+  } finally {
+    await sleep(RATE_LIMIT_DELAY_MS);
+  }
+}
+
+/**
  * Fetch all tasks for a project (paginated).
  * Ports GAS lines 193-215.
  */

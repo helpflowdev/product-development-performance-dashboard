@@ -15,6 +15,7 @@ export interface SyncResult {
   tasksInserted: number;
   tasksDeleted: number;
   totalTasks: number;
+  datesFilled: number;       // "Date Added to Sprint" (col X) values backfilled this run
   error?: string;
   durationMs: number;
 }

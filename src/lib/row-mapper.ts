@@ -107,6 +107,10 @@ export function mapRowsToSprintRows(rawRows: string[][]): SprintRow[] {
       role: getCellValue(row, colMap['Role']),
       dateCompletedForBurndown: getCellValue(row, colMap['Date Completed for Burndown']),
       carriedOver: getCellValue(row, colMap['Carried Over']),
+      // Column X. Not in requiredCols on purpose: if the header is absent/renamed,
+      // getCellValue returns '' and the burndown engine falls back to the
+      // creation date rather than breaking the whole dashboard.
+      dateAddedToSprint: getCellValue(row, colMap['Date Added to Sprint']),
     });
   }
 

@@ -2,11 +2,13 @@ import {
   findAsanaProject,
   getProjectDetails,
   fetchProjectTasks,
+  fetchTaskAddedToProjectDate,
   formatDateOnly,
 } from '@/lib/asana';
 import {
   fetchSheetRowsForSync,
   batchUpdateSheetRows,
+  batchUpdateColumnX,
   insertSheetRows,
   appendSheetRows,
   deleteSheetRows,
@@ -103,6 +105,7 @@ export async function syncSprintData(
     tasksInserted: 0,
     tasksDeleted: 0,
     totalTasks: 0,
+    datesFilled: 0,
     durationMs: 0,
   };
 
@@ -222,7 +225,54 @@ export async function syncSprintData(
       result.tasksDeleted = rowsToDelete.length;
     }
 
-    // 10. Invalidate cache
+    // 10. Backfill "Date Added to Sprint" (column X) from Asana's activity log.
+    //     Only rows with a blank X are looked up, so the first sync after adding
+    //     the column does a one-time backfill and later syncs only touch new
+    //     tasks. Best-effort: failures here never fail the overall sync, and
+    //     writes are flushed in chunks so an interrupted run resumes next time.
+    try {
+      const freshRows = await fetchSheetRowsForSync(); // A:X
+      const urlToGid = new Map(tasks.map((t) => [t.permalink_url, t.gid]));
+      const COL_X = 23; // 0-based index of column X
+
+      const lookups: Array<{ rowNumber: number; gid: string }> = [];
+      for (let i = 1; i < freshRows.length; i++) {
+        const row = freshRows[i];
+        if (row[0] !== projectInfo.title) continue; // only this sprint
+        if ((row[COL_X] ?? '').trim()) continue; // already filled
+        const gid = urlToGid.get(row[4]); // col E = Link to Task
+        if (gid) lookups.push({ rowNumber: i + 1, gid });
+      }
+
+      if (lookups.length > 0) {
+        log(`Resolving "Date Added to Sprint" for ${lookups.length} task(s)...`);
+        const FLUSH_EVERY = 25;
+        let pending: Array<{ rowNumber: number; value: string }> = [];
+        let done = 0;
+
+        for (const { rowNumber, gid } of lookups) {
+          const date = await fetchTaskAddedToProjectDate(gid, projectInfo.title);
+          done++;
+          if (date) pending.push({ rowNumber, value: date });
+          if (pending.length >= FLUSH_EVERY) {
+            await batchUpdateColumnX(pending);
+            result.datesFilled += pending.length;
+            pending = [];
+          }
+          if (done % 10 === 0) log(`  ...resolved ${done}/${lookups.length}`);
+        }
+        if (pending.length > 0) {
+          await batchUpdateColumnX(pending);
+          result.datesFilled += pending.length;
+        }
+        log(`Filled ${result.datesFilled} "Date Added to Sprint" value(s).`);
+      }
+    } catch (err) {
+      // Non-fatal: the A–L sync already succeeded; X backfill resumes next run.
+      log(`Warning: could not backfill "Date Added to Sprint": ${String(err)}`);
+    }
+
+    // 11. Invalidate cache
     log('Invalidating dashboard cache...');
     invalidateSheetCache();
 

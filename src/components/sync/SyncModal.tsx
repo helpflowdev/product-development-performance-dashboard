@@ -368,6 +368,10 @@ export function SyncModal({ isOpen, onClose }: SyncModalProps) {
                       {result.tasksDeleted} tasks
                     </p>
                     <p>
+                      <span className="text-slate-400">Date Added to Sprint filled:</span>{' '}
+                      {result.datesFilled} tasks
+                    </p>
+                    <p>
                       <span className="text-slate-400">Total:</span>{' '}
                       {result.totalTasks} tasks
                     </p>

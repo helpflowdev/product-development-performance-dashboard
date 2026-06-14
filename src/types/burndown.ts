@@ -32,7 +32,7 @@ export interface QAFlag {
   assignee?: string;
   status?: string;                         // task status: "Complete" | "Incomplete"
   date?: string;                           // for date_outside_sprint: the completion date
-  dateAssigned?: string;                   // for task_added_mid_sprint: the assigned (creation) date
+  dateAddedToSprint?: string;              // for task_added_mid_sprint: when the task entered the sprint
   sprintStart?: string;
   sprintEnd?: string;
   sprints?: string[];                      // for task_in_multiple_sprints: the OTHER sprints this task also appears in

@@ -24,6 +24,17 @@ function resolveBurndownDate(row: SprintRow): Date | null {
 }
 
 /**
+ * When did this task enter the sprint?
+ * Prefer the explicit "Date Added to Sprint" (sourced from Asana's activity log),
+ * which correctly catches backlog tasks pulled in mid-sprint. Fall back to the
+ * task creation date ("Date Assigned") for rows not yet backfilled, preserving
+ * the previous behavior until a sync populates column X.
+ */
+function resolveSprintEntryDate(row: SprintRow): Date | null {
+  return parseDate(row.dateAddedToSprint) ?? parseDate(row.dateAssigned);
+}
+
+/**
  * Get unique sprints from raw rows, sorted reverse-chronologically by start date
  */
 export function getUniqueSprints(rows: SprintRow[]): SprintMeta[] {
@@ -264,15 +275,18 @@ export function computeBurndown(
     }
   }
 
-  // Detect tasks added mid-sprint: "Date Assigned" (Asana creation date) falls
+  // Detect tasks added mid-sprint: the date the task entered the sprint falls
   // after the sprint start date, i.e. scope added after the sprint kicked off.
-  // Recurring tasks ((DT)/(WT)/(ST)) are excluded — they're planned, even though a
-  // fresh instance spawns mid-sprint each time the previous one is completed.
+  // This uses "Date Added to Sprint" (when available) so backlog tasks pulled in
+  // mid-sprint are caught even though they were created earlier; it falls back to
+  // the creation date for rows not yet backfilled. Recurring tasks ((DT)/(WT)/(ST))
+  // are excluded — they're planned, even though a fresh instance spawns mid-sprint
+  // each time the previous one is completed.
   let addedPoints = 0;
   for (const row of sprintRows) {
     if (isRecurringTask(row)) continue;
-    const assignedDate = parseDate(row.dateAssigned);
-    if (assignedDate && isDateAfter(assignedDate, startDate)) {
+    const entryDate = resolveSprintEntryDate(row);
+    if (entryDate && isDateAfter(entryDate, startDate)) {
       addedPoints += parseFloat(row.storyPoints) || 0;
       qaFlags.push({
         type: 'task_added_mid_sprint',
@@ -280,7 +294,7 @@ export function computeBurndown(
         taskUrl: row.linkToTask,
         assignee: row.assigneeName,
         status: row.status,
-        dateAssigned: toDateString(assignedDate),
+        dateAddedToSprint: toDateString(entryDate),
       });
     }
   }
