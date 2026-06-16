@@ -102,6 +102,27 @@ export async function findAsanaProject(
 }
 
 /**
+ * Resolve the workspace (organization) gid for workspace-wide search. Prefers
+ * ASANA_WORKSPACE_ID, but falls back to deriving it from the configured
+ * ASANA_TEAM_ID's organization — so the search works in deployments that only
+ * set ASANA_TEAM_ID (the common case here). Returns null if neither resolves.
+ */
+async function resolveWorkspaceId(): Promise<string | null> {
+  const workspaceId = process.env.ASANA_WORKSPACE_ID;
+  if (workspaceId) return workspaceId;
+
+  const teamId = process.env.ASANA_TEAM_ID;
+  if (!teamId) return null;
+
+  const url = `${ASANA_BASE_URL}/teams/${teamId}?opt_fields=organization.gid`;
+  const response = await fetch(url, { method: 'GET', headers: getHeaders() });
+  if (!response.ok) return null;
+
+  const data = await response.json();
+  return data.data?.organization?.gid ?? null;
+}
+
+/**
  * Find a project by exact name across the ENTIRE workspace via Asana's
  * typeahead search (not scoped to a team). This reaches sprint projects that
  * haven't been added to the (dept) Development team yet — which the team-scoped
@@ -112,7 +133,7 @@ export async function findProjectInWorkspace(
   sprintName: string,
   log?: LogFn,
 ): Promise<AsanaProject | null> {
-  const workspaceId = process.env.ASANA_WORKSPACE_ID;
+  const workspaceId = await resolveWorkspaceId();
   if (!workspaceId) return null;
 
   const target = sprintName.trim();
