@@ -102,6 +102,63 @@ export async function findAsanaProject(
 }
 
 /**
+ * Find a project by exact name across the ENTIRE workspace via Asana's
+ * typeahead search (not scoped to a team). This reaches sprint projects that
+ * haven't been added to the (dept) Development team yet — which the team-scoped
+ * fetchAsanaProjects() / findAsanaProject() cannot see. Returns the project
+ * whose name matches exactly (after trim), or null.
+ */
+export async function findProjectInWorkspace(
+  sprintName: string,
+  log?: LogFn,
+): Promise<AsanaProject | null> {
+  const workspaceId = process.env.ASANA_WORKSPACE_ID;
+  if (!workspaceId) return null;
+
+  const target = sprintName.trim();
+  const query = encodeURIComponent(target);
+  const url = `${ASANA_BASE_URL}/workspaces/${workspaceId}/typeahead?resource_type=project&count=20&opt_fields=name&query=${query}`;
+  const response = await fetch(url, { method: 'GET', headers: getHeaders() });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(
+      `Failed to search workspace projects: ${response.status} ${text}`,
+    );
+  }
+
+  const data = await response.json();
+  const match =
+    (data.data as AsanaProject[]).find((p) => p.name.trim() === target) ?? null;
+  if (match && log) log(`Found "${match.name}" in the workspace.`);
+  return match;
+}
+
+/**
+ * Set a project's owning team. Used to pull a sprint project into the
+ * (dept) Development team so the dashboard's team-scoped fetch can see it.
+ * Idempotent — setting the same team again is a no-op on Asana's side.
+ */
+export async function assignProjectToTeam(
+  projectGid: string,
+  teamId: string,
+): Promise<void> {
+  const url = `${ASANA_BASE_URL}/projects/${projectGid}`;
+  const response = await fetch(url, {
+    method: 'PUT',
+    headers: getHeaders(),
+    body: JSON.stringify({ data: { team: teamId } }),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(
+      `Failed to assign project to team: ${response.status} ${text}`,
+    );
+  }
+}
+
+/**
  * Format an ISO date string (YYYY-MM-DD) to MM/DD/YYYY.
  * Handles date-only strings without time/timezone concerns.
  */

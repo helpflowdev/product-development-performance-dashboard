@@ -280,6 +280,11 @@ export function SyncModal({ isOpen, onClose }: SyncModalProps) {
                 placeholder='Sprint #2025.Q1.S3 (0205-0218)'
                 className="glass-input w-full px-3 py-3 rounded-lg text-slate-100 font-medium border border-white/20 hover:border-white/40 focus:border-cyan-400/50 focus:outline-none transition-all disabled:opacity-50"
               />
+              <p className="mt-2 text-xs text-slate-500">
+                Use this for a brand-new sprint that isn&apos;t in the dropdown
+                yet. If it&apos;s not in the (dept) Development team, it&apos;ll
+                be added automatically before syncing.
+              </p>
             </div>
           )}
 

@@ -1,5 +1,7 @@
 import {
   findAsanaProject,
+  findProjectInWorkspace,
+  assignProjectToTeam,
   getProjectDetails,
   fetchProjectTasks,
   fetchTaskAddedToProjectDate,
@@ -110,9 +112,28 @@ export async function syncSprintData(
   };
 
   try {
-    // 1. Find sprint in Asana
+    // 1. Find sprint in Asana (team-scoped first).
     log('Searching for sprint in Asana...');
-    const project = await findAsanaProject(sprintName, log);
+    let project = await findAsanaProject(sprintName, log);
+
+    // Self-healing fallback: a freshly-created sprint may not belong to the
+    // (dept) Development team yet, so the team-scoped lookup above can't see it.
+    // Search the whole workspace and, if found, add it to the team — this fixes
+    // detection both for this sync and for all future dropdown/manual loads.
+    if (!project) {
+      const teamId = process.env.ASANA_TEAM_ID;
+      log('Not in the Development team. Searching the whole workspace...');
+      const wsProject = await findProjectInWorkspace(sprintName, log);
+
+      if (wsProject) {
+        if (teamId) {
+          log(`Adding "${wsProject.name}" to the (dept) Development team...`);
+          await assignProjectToTeam(wsProject.gid, teamId);
+          log('Added to team.');
+        }
+        project = wsProject;
+      }
+    }
 
     if (!project) {
       result.error = `Sprint "${sprintName}" not found in Asana`;
