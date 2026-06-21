@@ -61,17 +61,18 @@ function GroupedTaskList({
       </button>
 
       {open && (
-        <div className="mt-4 space-y-5">
+        // Scroll long lists inside the box so the page stays compact.
+        <div className="mt-3 max-h-80 overflow-y-auto pr-1 space-y-3">
           {total === 0 ? (
             <p className="text-sm text-slate-500">No tasks.</p>
           ) : (
             groups.map((group) => (
               <div key={group.assignee}>
-                <p className="text-sm font-semibold text-slate-200 mb-1">
+                <p className="text-sm font-semibold text-slate-200 mb-0.5">
                   {group.assignee}{' '}
                   <span className="text-slate-400 font-normal">({group.tasks.length})</span>
                 </p>
-                <ol className="space-y-1 text-sm list-decimal list-inside marker:text-slate-500">
+                <ol className="space-y-0.5 text-sm list-decimal list-inside marker:text-slate-500">
                   {group.tasks.map((task, i) => (
                     <li key={`${task.url || task.title}-${i}`} className="text-slate-300">
                       {task.url ? (
@@ -104,7 +105,7 @@ function GroupedTaskList({
  */
 export function SprintSummaryView({ summary }: SprintSummaryViewProps) {
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {summary.warning && (
         <Card className="border border-yellow-500/40 bg-yellow-500/10">
           <p className="text-sm text-yellow-300">⚠️ {summary.warning}</p>
@@ -127,8 +128,8 @@ export function SprintSummaryView({ summary }: SprintSummaryViewProps) {
         <span className="text-slate-400">Completed</span> = finished and not carried
         to the next sprint. <span className="text-slate-400">Carried Over</span> =
         added to the next sprint (any status).{' '}
-        <span className="text-slate-400">Plotted</span> = all non-recurring tasks in
-        this sprint. Recurring (DT)/(WT)/(ST) tasks are excluded.
+        <span className="text-slate-400">Plotted</span> = all tasks in this sprint,
+        including recurring (DT)/(WT)/(ST).
       </p>
 
       {/* Per-assignee breakdown */}
@@ -193,6 +194,7 @@ export function SprintSummaryView({ summary }: SprintSummaryViewProps) {
         }
         groups={summary.nextSprintTasks}
         accent="text-cyan-400"
+        defaultOpen
       />
     </div>
   );

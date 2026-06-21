@@ -36,13 +36,13 @@ export interface AssigneeSummary {
 }
 
 /**
- * Full computed summary for one sprint. All counts/lists cover non-recurring
- * ("plotted") tasks only; recurring (DT)/(WT)/(ST) tasks are excluded.
+ * Full computed summary for one sprint. All counts/lists cover EVERY task in the
+ * sprint, including recurring (DT)/(WT)/(ST) — unlike the burndown.
  */
 export interface SprintSummaryResponse {
   sprintId: string;
 
-  plottedCount: number; // total non-recurring tasks plotted in the sprint
+  plottedCount: number; // total tasks plotted in the sprint (incl. recurring)
   completedCount: number; // Complete AND not carried over
   carriedOverCount: number; // also appears in the next sprint
   incompleteCount: number; // not Complete AND not carried over

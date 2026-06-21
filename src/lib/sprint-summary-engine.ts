@@ -19,8 +19,8 @@ import { getUniqueSprints } from './burndown-engine';
  *   - Carried Over: the same Asana task (by link) also appears in the NEXT sprint.
  *   - Completed:    status "Complete" AND not carried over.
  *   - Incomplete:   not "Complete" AND not carried over.
- *   - Plotted:      all non-recurring tasks in the sprint (= the three buckets).
- * Recurring (DT)/(WT)/(ST) tasks are excluded from every count and list.
+ *   - Plotted:      ALL tasks in the sprint (= the three buckets).
+ * Unlike the burndown, recurring (DT)/(WT)/(ST) tasks ARE included here.
  */
 
 /**
@@ -43,14 +43,6 @@ const NAME_ORDER = [
 ] as const;
 
 const NAME_ORDER_SET = new Set<string>(NAME_ORDER);
-
-/** Recurring markers — planned but auto-respawned, excluded from the summary. */
-const RECURRING_MARKER = /\((?:DT|WT|ST)\)/i;
-function isRecurring(row: SprintRow): boolean {
-  return (
-    RECURRING_MARKER.test(row.recurringTask) || RECURRING_MARKER.test(row.tasksTitle)
-  );
-}
 
 interface MutableAssignee {
   total: number;
@@ -110,17 +102,68 @@ function taskRef(row: SprintRow): TaskRef {
 }
 
 /**
- * Resolve the next sprint name (smallest start date strictly greater than the
- * selected sprint's). Reuses getUniqueSprints for date parsing/ordering.
+ * Sprint naming convention: "Sprint #YYYY.QX.SY (MMDD-MMDD)". Parsed into an
+ * orderable tuple so the next sprint is "the next S within the quarter, rolling
+ * over to S1 of the next quarter" — independent of how many sprints a quarter has.
+ */
+const SPRINT_NAME_RE = /Sprint\s*#(\d{4})\.Q(\d)\.S(\d+)/i;
+interface SprintOrder {
+  year: number;
+  quarter: number;
+  sprint: number;
+}
+function parseSprintOrder(name: string): SprintOrder | null {
+  const m = name.match(SPRINT_NAME_RE);
+  if (!m) return null;
+  return { year: +m[1], quarter: +m[2], sprint: +m[3] };
+}
+function compareOrder(a: SprintOrder, b: SprintOrder): number {
+  if (a.year !== b.year) return a.year - b.year;
+  if (a.quarter !== b.quarter) return a.quarter - b.quarter;
+  return a.sprint - b.sprint;
+}
+
+/**
+ * Resolve the next sprint name.
+ *
+ * Primary: by the naming convention — the smallest (year, quarter, sprint) tuple
+ * strictly greater than the selected sprint's, among the sprints present in the
+ * data. This handles S6 → S7 → (next quarter) S1 without depending on dates or
+ * knowing how many sprints a quarter has.
+ *
+ * Fallback (selected name doesn't parse, or no convention-named sprint follows):
+ * by start date via getUniqueSprints.
  */
 function resolveNextSprintName(
   allRows: SprintRow[],
   selectedSprint: string,
 ): string | null {
+  const names = new Set<string>();
+  for (const r of allRows) {
+    const n = r.sprint.trim();
+    if (n) names.add(n);
+  }
+
+  const selOrder = parseSprintOrder(selectedSprint);
+  if (selOrder) {
+    let bestName: string | null = null;
+    let bestOrder: SprintOrder | null = null;
+    for (const name of names) {
+      if (name === selectedSprint) continue;
+      const o = parseSprintOrder(name);
+      if (!o || compareOrder(o, selOrder) <= 0) continue; // not strictly after
+      if (bestOrder === null || compareOrder(o, bestOrder) < 0) {
+        bestOrder = o;
+        bestName = name;
+      }
+    }
+    if (bestName) return bestName;
+  }
+
+  // Date-based fallback.
   const sprints = getUniqueSprints(allRows); // newest-first, YYYY-MM-DD dates
   const selected = sprints.find((s) => s.id === selectedSprint);
   if (!selected) return null;
-
   let next: { id: string; startDate: string } | null = null;
   for (const s of sprints) {
     if (s.startDate <= selected.startDate) continue;
@@ -143,7 +186,7 @@ export function computeSprintSummary(
   // sprint task whose link is in this set was carried over / added to the next sprint.
   const nextSprintName = resolveNextSprintName(allRows, target);
   const nextSprintRows = nextSprintName
-    ? allRows.filter((r) => r.sprint.trim() === nextSprintName && !isRecurring(r))
+    ? allRows.filter((r) => r.sprint.trim() === nextSprintName)
     : [];
   const nextSprintLinks = new Set<string>();
   for (const r of nextSprintRows) {
@@ -160,8 +203,6 @@ export function computeSprintSummary(
   let totalHoursActual = 0;
 
   for (const row of sprintTasks) {
-    if (isRecurring(row)) continue; // recurring excluded from the summary
-
     const assignee = resolveAssignee(row.assigneeName.trim());
     const link = row.linkToTask.trim();
     const isComplete = row.status.trim() === 'Complete';
