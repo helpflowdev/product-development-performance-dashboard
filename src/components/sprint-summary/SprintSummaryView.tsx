@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { Card } from '@/components/ui/Card';
+import { formatHours } from '@/lib/format';
 import { AssigneeTaskGroup, SprintSummaryResponse } from '@/types/sprint-summary';
 
 interface SprintSummaryViewProps {
@@ -62,7 +63,7 @@ function GroupedTaskList({
 
       {open && (
         // Scroll long lists inside the box so the page stays compact.
-        <div className="mt-3 max-h-80 overflow-y-auto pr-1 space-y-3">
+        <div className="list-scroll mt-3 max-h-64 overflow-y-auto pr-2 space-y-3">
           {total === 0 ? (
             <p className="text-sm text-slate-500">No tasks.</p>
           ) : (
@@ -119,7 +120,7 @@ export function SprintSummaryView({ summary }: SprintSummaryViewProps) {
         <MetricTile label="Completion Rate" value={`${summary.completionRate.toFixed(2)}%`} />
         <MetricTile
           label="Est / Actual Hours"
-          value={`${summary.totalHoursEstimate.toFixed(2)} / ${summary.totalHoursActual.toFixed(2)}`}
+          value={`${formatHours(summary.totalHoursEstimate)} / ${formatHours(summary.totalHoursActual)}`}
         />
       </div>
 
@@ -156,7 +157,7 @@ export function SprintSummaryView({ summary }: SprintSummaryViewProps) {
                     <td className="py-2 text-slate-300">
                       {noHours
                         ? '—'
-                        : `${Math.ceil(a.hoursActual)} (${Math.ceil(a.hoursEstimate)})`}
+                        : `${formatHours(a.hoursActual)} (${formatHours(a.hoursEstimate)})`}
                     </td>
                   </tr>
                 );
@@ -184,6 +185,7 @@ export function SprintSummaryView({ summary }: SprintSummaryViewProps) {
           title="Incomplete (Not Carried Over)"
           groups={summary.incompleteTasks}
           accent="text-rose-400"
+          defaultOpen
         />
       )}
       <GroupedTaskList

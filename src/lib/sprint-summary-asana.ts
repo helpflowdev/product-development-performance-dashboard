@@ -1,4 +1,5 @@
 import { SprintSummaryResponse, SendToAsanaResult } from '@/types/sprint-summary';
+import { formatHours } from './format';
 import {
   createAsanaTask,
   postCommentToTask,
@@ -34,9 +35,9 @@ export function buildSummaryCommentText(summary: SprintSummaryResponse): string 
     `Plotted Tasks: ${summary.plottedCount}`,
     `Carried Over to Next Sprint: ${summary.carriedOverCount}`,
     `Completion Rate: ${summary.completionRate.toFixed(2)}%`,
-    `Total Estimated vs Actual Hours: ${summary.totalHoursEstimate.toFixed(
-      2,
-    )} / ${summary.totalHoursActual.toFixed(2)}`,
+    `Total Estimated vs Actual Hours: ${formatHours(
+      summary.totalHoursEstimate,
+    )} / ${formatHours(summary.totalHoursActual)}`,
     'Completed vs Plotted (per assignee):',
   ];
 
@@ -48,7 +49,7 @@ export function buildSummaryCommentText(summary: SprintSummaryResponse): string 
   for (const a of summary.assignees) {
     if (a.hoursEstimate === 0 && a.hoursActual === 0) continue;
     lines.push(
-      `${a.name}: ${Math.ceil(a.hoursActual)} (${Math.ceil(a.hoursEstimate)})`,
+      `${a.name}: ${formatHours(a.hoursActual)} (${formatHours(a.hoursEstimate)})`,
     );
   }
 
