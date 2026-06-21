@@ -66,6 +66,10 @@ export interface SprintSummaryResponse {
   // only). null when GEMINI_API_KEY isn't set or generation failed — the
   // operator can still type a focus note manually before sending.
   focusSummary: string | null;
+  // Short reason shown in the UI when focusSummary is null because generation
+  // failed (bad key, model issue, timeout). null when no key is set (expected) or
+  // when generation succeeded.
+  focusSummaryError: string | null;
 
   // Set when the next sprint can't be resolved (e.g. not yet synced). Carry-over
   // detection can't run without it, so carriedOver falls back to empty.

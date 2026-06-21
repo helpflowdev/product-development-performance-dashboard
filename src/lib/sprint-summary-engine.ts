@@ -296,8 +296,9 @@ export function computeSprintSummary(
     incompleteTasks: groupByAssignee(incompleteItems),
     nextSprintName,
     nextSprintTasks,
-    // Attached by the route after an async Claude call (pure engine stays sync).
+    // Attached by the route after an async Gemini call (pure engine stays sync).
     focusSummary: null,
+    focusSummaryError: null,
     warning: nextSprintName
       ? null
       : 'Next sprint not found — carry-over detection is off until the next sprint is synced into the data.',

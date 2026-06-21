@@ -3,15 +3,17 @@
  * using the Google Gemini API (free tier via Google AI Studio). Recurring/daily
  * tasks are excluded by the caller — only real deliverables are passed in.
  *
- * Graceful by design: returns null (never throws) when GEMINI_API_KEY is not
- * configured, when there are no titles, or on any API error — so the rest of the
- * sprint summary still works and the operator can type a focus note manually.
+ * Robust to model churn: unless GEMINI_MODEL is set, it asks the API which models
+ * the key can use and picks an available "flash" model that supports
+ * generateContent. Never throws — returns { summary, error }, where `error` is a
+ * short human-readable reason (surfaced in the UI) so a misconfiguration isn't a
+ * silent empty box.
  *
  * Uses the REST endpoint directly (no SDK dependency). Auth is the AI Studio API
  * key via the x-goog-api-key header.
  */
 
-const DEFAULT_MODEL = 'gemini-2.0-flash';
+const API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 const MAX_TITLES = 400; // keep the prompt bounded for very large sprints
 const TIMEOUT_MS = 30000;
 
@@ -25,37 +27,90 @@ const SYSTEM_PROMPT = [
   'preamble, headings, bullet points, or meta-commentary.',
 ].join(' ');
 
-interface GeminiResponse {
-  candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+export interface FocusResult {
+  summary: string | null;
+  error: string | null; // short reason when summary is null (null when no key)
+}
+
+interface ModelEntry {
+  name?: string;
+  supportedGenerationMethods?: string[];
+}
+
+// Cached across invocations in the same serverless instance (set only on success).
+let cachedModel: string | null = null;
+
+function snippet(s: string): string {
+  return s.replace(/\s+/g, ' ').trim().slice(0, 200);
+}
+
+/**
+ * Pick a Gemini model the key can actually use for generateContent. Honors
+ * GEMINI_MODEL, then a cached working model, else discovers one — preferring a
+ * stable "flash" model. Returns { model, error }.
+ */
+async function resolveModel(
+  apiKey: string,
+  signal: AbortSignal,
+): Promise<{ model: string | null; error: string | null }> {
+  if (process.env.GEMINI_MODEL) return { model: process.env.GEMINI_MODEL, error: null };
+  if (cachedModel) return { model: cachedModel, error: null };
+
+  const res = await fetch(`${API_BASE}/models`, {
+    headers: { 'x-goog-api-key': apiKey },
+    signal,
+  });
+  if (!res.ok) {
+    return {
+      model: null,
+      error: `Couldn't list Gemini models (HTTP ${res.status}: ${snippet(
+        await res.text().catch(() => ''),
+      )}). Check the API key.`,
+    };
+  }
+
+  const models = (((await res.json()) as { models?: ModelEntry[] }).models ?? []).filter(
+    (m) => (m.supportedGenerationMethods ?? []).includes('generateContent'),
+  );
+  const bare = (m: ModelEntry) => (m.name ?? '').replace(/^models\//, '');
+  const usable = models.map(bare).filter(Boolean);
+
+  const flashStable = usable
+    .filter((n) => /flash/i.test(n) && !/(exp|preview|thinking)/i.test(n))
+    .sort()
+    .reverse(); // newer version strings sort last → reverse to prefer newest
+  const anyFlash = usable.filter((n) => /flash/i.test(n));
+  const picked = flashStable[0] ?? anyFlash[0] ?? usable[0] ?? null;
+
+  if (!picked) {
+    return { model: null, error: 'No Gemini model available to this key supports text generation.' };
+  }
+  return { model: picked, error: null };
 }
 
 export async function generateFocusSummary(
   sprintName: string,
   taskTitles: string[],
-): Promise<string | null> {
+): Promise<FocusResult> {
   const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) return null;
+  if (!apiKey) return { summary: null, error: null };
 
   const titles = taskTitles
     .map((t) => t.trim())
     .filter((t) => t.length > 0)
     .slice(0, MAX_TITLES);
-  if (titles.length === 0) return null;
+  if (titles.length === 0) return { summary: null, error: null };
 
-  const model = process.env.GEMINI_MODEL ?? DEFAULT_MODEL;
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
-
-  // Fail fast rather than hanging the summary request if the API is slow.
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
   try {
-    const response = await fetch(url, {
+    const { model, error } = await resolveModel(apiKey, controller.signal);
+    if (!model) return { summary: null, error };
+
+    const response = await fetch(`${API_BASE}/models/${model}:generateContent`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-goog-api-key': apiKey,
-      },
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
       body: JSON.stringify({
         system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
         contents: [
@@ -74,23 +129,27 @@ export async function generateFocusSummary(
     });
 
     if (!response.ok) {
-      const detail = await response.text().catch(() => '');
-      console.error(
-        `[sprint-focus-summary] Gemini HTTP ${response.status}: ${detail.slice(0, 300)}`,
-      );
-      return null;
+      const detail = snippet(await response.text().catch(() => ''));
+      console.error(`[sprint-focus-summary] Gemini HTTP ${response.status}: ${detail}`);
+      return { summary: null, error: `Gemini "${model}" HTTP ${response.status}: ${detail}` };
     }
 
-    const data = (await response.json()) as GeminiResponse;
+    const data = (await response.json()) as {
+      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+    };
     const text = (data.candidates?.[0]?.content?.parts ?? [])
       .map((p) => p.text ?? '')
       .join('')
       .trim();
 
-    return text || null;
+    if (!text) return { summary: null, error: `Gemini "${model}" returned no text.` };
+
+    cachedModel = model; // remember the working model
+    return { summary: text, error: null };
   } catch (error) {
+    const msg = controller.signal.aborted ? 'Gemini request timed out.' : String(error);
     console.error('[sprint-focus-summary] generation failed:', error);
-    return null;
+    return { summary: null, error: snippet(msg) };
   } finally {
     clearTimeout(timer);
   }
