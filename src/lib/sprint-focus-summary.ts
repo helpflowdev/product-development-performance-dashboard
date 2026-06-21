@@ -1,17 +1,19 @@
-import Anthropic from '@anthropic-ai/sdk';
-
 /**
  * Generate a short "what did this sprint focus on" summary from task titles,
- * using Claude. Recurring/daily tasks are excluded by the caller — only real
- * deliverables are passed in.
+ * using the Google Gemini API (free tier via Google AI Studio). Recurring/daily
+ * tasks are excluded by the caller — only real deliverables are passed in.
  *
- * Graceful by design: returns null (never throws) when ANTHROPIC_API_KEY is not
+ * Graceful by design: returns null (never throws) when GEMINI_API_KEY is not
  * configured, when there are no titles, or on any API error — so the rest of the
  * sprint summary still works and the operator can type a focus note manually.
+ *
+ * Uses the REST endpoint directly (no SDK dependency). Auth is the AI Studio API
+ * key via the x-goog-api-key header.
  */
 
-const MODEL = 'claude-opus-4-8';
+const DEFAULT_MODEL = 'gemini-2.0-flash';
 const MAX_TITLES = 400; // keep the prompt bounded for very large sprints
+const TIMEOUT_MS = 30000;
 
 const SYSTEM_PROMPT = [
   "You summarize a software team's sprint.",
@@ -23,11 +25,16 @@ const SYSTEM_PROMPT = [
   'preamble, headings, bullet points, or meta-commentary.',
 ].join(' ');
 
+interface GeminiResponse {
+  candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+}
+
 export async function generateFocusSummary(
   sprintName: string,
   taskTitles: string[],
 ): Promise<string | null> {
-  if (!process.env.ANTHROPIC_API_KEY) return null;
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) return null;
 
   const titles = taskTitles
     .map((t) => t.trim())
@@ -35,25 +42,48 @@ export async function generateFocusSummary(
     .slice(0, MAX_TITLES);
   if (titles.length === 0) return null;
 
+  const model = process.env.GEMINI_MODEL ?? DEFAULT_MODEL;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+
   // Fail fast rather than hanging the summary request if the API is slow.
-  const client = new Anthropic({ timeout: 30000, maxRetries: 1 });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
   try {
-    const response = await client.messages.create({
-      model: MODEL,
-      max_tokens: 512,
-      output_config: { effort: 'low' },
-      system: SYSTEM_PROMPT,
-      messages: [
-        {
-          role: 'user',
-          content: `Sprint: ${sprintName}\n\nTask titles:\n- ${titles.join('\n- ')}`,
-        },
-      ],
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': apiKey,
+      },
+      body: JSON.stringify({
+        system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
+        contents: [
+          {
+            role: 'user',
+            parts: [
+              {
+                text: `Sprint: ${sprintName}\n\nTask titles:\n- ${titles.join('\n- ')}`,
+              },
+            ],
+          },
+        ],
+        generationConfig: { maxOutputTokens: 512, temperature: 0.3 },
+      }),
+      signal: controller.signal,
     });
 
-    const text = response.content
-      .map((block) => (block.type === 'text' ? block.text : ''))
+    if (!response.ok) {
+      const detail = await response.text().catch(() => '');
+      console.error(
+        `[sprint-focus-summary] Gemini HTTP ${response.status}: ${detail.slice(0, 300)}`,
+      );
+      return null;
+    }
+
+    const data = (await response.json()) as GeminiResponse;
+    const text = (data.candidates?.[0]?.content?.parts ?? [])
+      .map((p) => p.text ?? '')
       .join('')
       .trim();
 
@@ -61,5 +91,7 @@ export async function generateFocusSummary(
   } catch (error) {
     console.error('[sprint-focus-summary] generation failed:', error);
     return null;
+  } finally {
+    clearTimeout(timer);
   }
 }

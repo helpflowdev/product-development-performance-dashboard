@@ -36,7 +36,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const summary = computeSprintSummary(sprintRows, sprintId);
 
     // AI focus summary from non-recurring task titles. Returns null (no throw)
-    // when ANTHROPIC_API_KEY isn't set or generation fails — summary still works.
+    // when GEMINI_API_KEY isn't set or generation fails — summary still works.
     summary.focusSummary = await generateFocusSummary(
       sprintId,
       getNonRecurringTaskTitles(sprintRows, sprintId),

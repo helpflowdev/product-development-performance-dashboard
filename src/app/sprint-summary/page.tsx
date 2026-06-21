@@ -206,7 +206,7 @@ export default function SprintSummaryPage() {
                 rows={3}
                 placeholder={
                   summary.focusSummary === null
-                    ? 'No AI summary (set ANTHROPIC_API_KEY to auto-generate). You can type a short focus note here.'
+                    ? 'No AI summary (set GEMINI_API_KEY to auto-generate). You can type a short focus note here.'
                     : 'What did this sprint focus on?'
                 }
                 className="glass-input w-full px-3 py-2 rounded-lg text-sm text-slate-100 border border-white/20 hover:border-white/40 focus:border-cyan-400/50 focus:outline-none transition-all resize-y"
