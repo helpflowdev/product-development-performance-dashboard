@@ -1,16 +1,20 @@
 import { SprintSummaryResponse, SendToAsanaResult } from '@/types/sprint-summary';
-import { createAsanaTask, postCommentToTask, postListInChunks } from './asana';
+import {
+  createAsanaTask,
+  postCommentToTask,
+  postGroupedTaskListInChunks,
+} from './asana';
 
 /**
  * Sends a computed Sprint Summary to Asana.
  *
- * Ports the legacy Google Apps Script `SprintPlanning.sendSprintSummaryToAsana`:
- * it creates a `Sprint Summary: <name>` task in the configured project, posts the
- * summary block as one comment, then posts the Completed / Transferred /
- * Next-Sprint task-URL lists as chunked comments.
+ * Creates a `Sprint Summary: <name>` task in the configured project, posts the
+ * metrics + per-assignee breakdown as a plain-text comment, then posts the
+ * Completed / Carried-Over / Incomplete / Next-Sprint lists as rich-text comments
+ * with hyperlinked titles grouped per assignee.
  */
 
-/** Asana project the summary task is created in (the script's hardcoded project). */
+/** Asana project the summary task is created in (the legacy macro's project). */
 const DEFAULT_SUMMARY_PROJECT_ID = '514125768649585';
 
 /** Small pause between comment posts to stay clear of Asana rate limits. */
@@ -19,20 +23,21 @@ function sleep(ms: number): Promise<void> {
 }
 
 /**
- * Build the summary comment text, matching the script's on-sheet summary block
- * run through formatSummaryText (heading lines — those ending in ':' — get a
- * blank line above and below).
+ * Build the metrics + per-assignee summary comment (plain text). Heading lines
+ * (those ending in ':') are padded with surrounding blank lines for readability.
  */
 export function buildSummaryCommentText(summary: SprintSummaryResponse): string {
   const lines: string[] = [
     'Sprint Summary',
     `Sprint: ${summary.sprintId}`,
-    `Total Tasks: ${summary.completedTasks} (${summary.totalTasks})`,
+    `Completed Tasks: ${summary.completedCount}`,
+    `Plotted Tasks: ${summary.plottedCount}`,
+    `Carried Over to Next Sprint: ${summary.carriedOverCount}`,
     `Completion Rate: ${summary.completionRate.toFixed(2)}%`,
     `Total Estimated vs Actual Hours: ${summary.totalHoursEstimate.toFixed(
       2,
     )} / ${summary.totalHoursActual.toFixed(2)}`,
-    'Completed vs Total Task:',
+    'Completed vs Plotted (per assignee):',
   ];
 
   for (const a of summary.assignees) {
@@ -41,14 +46,12 @@ export function buildSummaryCommentText(summary: SprintSummaryResponse): string 
 
   lines.push('Actual vs Estimate Hours:');
   for (const a of summary.assignees) {
-    // The hours section skips assignees with no hours at all (script parity).
     if (a.hoursEstimate === 0 && a.hoursActual === 0) continue;
     lines.push(
       `${a.name}: ${Math.ceil(a.hoursActual)} (${Math.ceil(a.hoursEstimate)})`,
     );
   }
 
-  // formatSummaryText: pad heading lines (ending in ':') with surrounding blanks.
   return lines
     .map((line) => (line.endsWith(':') ? `\n${line}\n` : line))
     .join('\n');
@@ -65,7 +68,7 @@ export async function sendSprintSummaryToAsana(
   try {
     const { gid, permalinkUrl } = await createAsanaTask(projectId, taskTitle);
 
-    // 1. Summary block.
+    // 1. Metrics + per-assignee breakdown (plain text).
     const summaryResult = await postCommentToTask(
       gid,
       buildSummaryCommentText(summary),
@@ -73,32 +76,30 @@ export async function sendSprintSummaryToAsana(
     if (summaryResult.success) commentsPosted++;
     await sleep(1000);
 
-    // 2. Completed tasks (chunked).
-    if (summary.completedTaskUrls.length > 0) {
-      commentsPosted += await postListInChunks(
-        gid,
-        summary.completedTaskUrls,
-        'Completed Tasks',
-      );
-      await sleep(1000);
-    }
+    // 2-5. Grouped, hyperlinked task lists (rich text). Each helper no-ops on
+    //      an empty list and returns how many comments it posted.
+    const sections: Array<{ label: string; groups: typeof summary.completedTasks }> = [
+      { label: 'Completed Tasks', groups: summary.completedTasks },
+      { label: 'Carried Over to Next Sprint', groups: summary.carriedOverTasks },
+      { label: 'Incomplete (Not Carried Over)', groups: summary.incompleteTasks },
+      {
+        label: summary.nextSprintName
+          ? `Next Sprint Tasks — ${summary.nextSprintName}`
+          : 'Next Sprint Tasks',
+        groups: summary.nextSprintTasks,
+      },
+    ];
 
-    // 3. Transferred tasks (single comment, as in the script).
-    if (summary.transferredTaskUrls.length > 0) {
-      const text =
-        'Transferred Tasks:\n\n' + summary.transferredTaskUrls.join('\n');
-      const r = await postCommentToTask(gid, text);
-      if (r.success) commentsPosted++;
-      await sleep(1000);
-    }
-
-    // 4. Next sprint tasks (chunked — a freshly synced sprint can be large).
-    if (summary.nextSprintTaskUrls.length > 0) {
-      commentsPosted += await postListInChunks(
+    for (const section of sections) {
+      const posted = await postGroupedTaskListInChunks(
         gid,
-        summary.nextSprintTaskUrls,
-        'Next Sprint Tasks',
+        section.label,
+        section.groups,
       );
+      if (posted > 0) {
+        commentsPosted += posted;
+        await sleep(1000);
+      }
     }
 
     return {

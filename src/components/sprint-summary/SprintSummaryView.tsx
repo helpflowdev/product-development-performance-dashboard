@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Card } from '@/components/ui/Card';
-import { SprintSummaryResponse } from '@/types/sprint-summary';
+import { AssigneeTaskGroup, SprintSummaryResponse } from '@/types/sprint-summary';
 
 interface SprintSummaryViewProps {
   summary: SprintSummaryResponse;
@@ -18,19 +18,28 @@ function MetricTile({ label, value }: { label: string; value: string }) {
   );
 }
 
-/** Collapsible list of task URLs. */
-function TaskUrlList({
+/** Total task count across all assignee groups. */
+function countTasks(groups: AssigneeTaskGroup[]): number {
+  return groups.reduce((sum, g) => sum + g.tasks.length, 0);
+}
+
+/**
+ * Collapsible list section: tasks grouped per assignee, each task a hyperlinked
+ * title under a "Name (count):" heading.
+ */
+function GroupedTaskList({
   title,
-  urls,
+  groups,
   accent,
   defaultOpen = false,
 }: {
   title: string;
-  urls: string[];
+  groups: AssigneeTaskGroup[];
   accent: string;
   defaultOpen?: boolean;
 }) {
   const [open, setOpen] = useState(defaultOpen);
+  const total = countTasks(groups);
 
   return (
     <Card>
@@ -39,7 +48,7 @@ function TaskUrlList({
         className="w-full flex items-center justify-between text-left"
       >
         <span className="font-semibold text-white">
-          {title} <span className={accent}>({urls.length})</span>
+          {title} <span className={accent}>({total})</span>
         </span>
         <svg
           className={`w-4 h-4 text-slate-300 transition-transform ${open ? 'rotate-180' : ''}`}
@@ -52,25 +61,36 @@ function TaskUrlList({
       </button>
 
       {open && (
-        <div className="mt-4">
-          {urls.length === 0 ? (
+        <div className="mt-4 space-y-5">
+          {total === 0 ? (
             <p className="text-sm text-slate-500">No tasks.</p>
           ) : (
-            <ol className="space-y-1 text-sm">
-              {urls.map((url, i) => (
-                <li key={`${url}-${i}`} className="flex gap-2">
-                  <span className="text-slate-500 w-6 shrink-0 text-right">{i + 1}.</span>
-                  <a
-                    href={url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-cyan-300 hover:text-cyan-200 hover:underline break-all"
-                  >
-                    {url}
-                  </a>
-                </li>
-              ))}
-            </ol>
+            groups.map((group) => (
+              <div key={group.assignee}>
+                <p className="text-sm font-semibold text-slate-200 mb-1">
+                  {group.assignee}{' '}
+                  <span className="text-slate-400 font-normal">({group.tasks.length})</span>
+                </p>
+                <ol className="space-y-1 text-sm list-decimal list-inside marker:text-slate-500">
+                  {group.tasks.map((task, i) => (
+                    <li key={`${task.url || task.title}-${i}`} className="text-slate-300">
+                      {task.url ? (
+                        <a
+                          href={task.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-cyan-300 hover:text-cyan-200 hover:underline"
+                        >
+                          {task.title}
+                        </a>
+                      ) : (
+                        task.title
+                      )}
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            ))
           )}
         </div>
       )}
@@ -92,20 +112,24 @@ export function SprintSummaryView({ summary }: SprintSummaryViewProps) {
       )}
 
       {/* Metric tiles */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <MetricTile
-          label="Total Tasks"
-          value={`${summary.completedTasks} (${summary.totalTasks})`}
-        />
-        <MetricTile
-          label="Completion Rate"
-          value={`${summary.completionRate.toFixed(2)}%`}
-        />
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <MetricTile label="Completed Tasks" value={`${summary.completedCount}`} />
+        <MetricTile label="Plotted Tasks" value={`${summary.plottedCount}`} />
+        <MetricTile label="Completion Rate" value={`${summary.completionRate.toFixed(2)}%`} />
         <MetricTile
           label="Est / Actual Hours"
           value={`${summary.totalHoursEstimate.toFixed(2)} / ${summary.totalHoursActual.toFixed(2)}`}
         />
       </div>
+
+      {/* Definitions note */}
+      <p className="text-xs text-slate-500">
+        <span className="text-slate-400">Completed</span> = finished and not carried
+        to the next sprint. <span className="text-slate-400">Carried Over</span> =
+        added to the next sprint (any status).{' '}
+        <span className="text-slate-400">Plotted</span> = all non-recurring tasks in
+        this sprint. Recurring (DT)/(WT)/(ST) tasks are excluded.
+      </p>
 
       {/* Per-assignee breakdown */}
       <Card>
@@ -115,7 +139,7 @@ export function SprintSummaryView({ summary }: SprintSummaryViewProps) {
             <thead>
               <tr className="text-left text-slate-400 border-b border-white/10">
                 <th className="py-2 pr-4 font-medium">Assignee</th>
-                <th className="py-2 pr-4 font-medium">Completed vs Total</th>
+                <th className="py-2 pr-4 font-medium">Completed vs Plotted</th>
                 <th className="py-2 font-medium">Actual (Est) Hours</th>
               </tr>
             </thead>
@@ -142,24 +166,32 @@ export function SprintSummaryView({ summary }: SprintSummaryViewProps) {
       </Card>
 
       {/* Task lists */}
-      <TaskUrlList
+      <GroupedTaskList
         title="Completed Tasks"
-        urls={summary.completedTaskUrls}
+        groups={summary.completedTasks}
         accent="text-emerald-400"
         defaultOpen
       />
-      <TaskUrlList
-        title="Transferred Tasks"
-        urls={summary.transferredTaskUrls}
+      <GroupedTaskList
+        title="Carried Over to Next Sprint"
+        groups={summary.carriedOverTasks}
         accent="text-amber-400"
+        defaultOpen
       />
-      <TaskUrlList
+      {summary.incompleteCount > 0 && (
+        <GroupedTaskList
+          title="Incomplete (Not Carried Over)"
+          groups={summary.incompleteTasks}
+          accent="text-rose-400"
+        />
+      )}
+      <GroupedTaskList
         title={
           summary.nextSprintName
             ? `Next Sprint Tasks — ${summary.nextSprintName}`
             : 'Next Sprint Tasks'
         }
-        urls={summary.nextSprintTaskUrls}
+        groups={summary.nextSprintTasks}
         accent="text-cyan-400"
       />
     </div>

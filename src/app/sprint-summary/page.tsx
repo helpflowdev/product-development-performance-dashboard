@@ -84,104 +84,108 @@ export default function SprintSummaryPage() {
   return (
     <div className="min-h-screen">
       <div className="max-w-5xl mx-auto px-4 py-8">
-        <div className="flex items-center justify-between mb-8">
+        {/* Header with action buttons */}
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
           <h1 className="text-xl font-bold text-white">Sprint Summary</h1>
+
           {summary && (
-            <button
-              onClick={() => {
-                setGenerateError(null);
-                setDialogOpen(true);
-              }}
-              className="px-4 py-2 rounded-lg border border-white/20 text-slate-200 hover:bg-white/10 transition-all text-sm font-medium"
-            >
-              Generate Another
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => {
+                  setGenerateError(null);
+                  setDialogOpen(true);
+                }}
+                className="px-4 py-2 rounded-lg border border-white/20 text-slate-200 hover:bg-white/10 transition-all text-sm font-medium"
+              >
+                Generate Another
+              </button>
+
+              {sendStatus === 'success' ? (
+                <span className="px-4 py-2 text-sm font-medium text-emerald-400">
+                  Sent ✓
+                </span>
+              ) : (
+                <button
+                  onClick={() => setSendStatus('confirm')}
+                  disabled={sendStatus === 'sending' || sendStatus === 'confirm'}
+                  className="neon-btn px-5 py-2 rounded-lg font-semibold text-white disabled:opacity-50 disabled:cursor-not-allowed transition-all text-sm"
+                >
+                  {sendStatus === 'sending' ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <span className="animate-spin rounded-full h-4 w-4 border-2 border-white/30 border-t-white" />
+                      Sending...
+                    </span>
+                  ) : (
+                    'Send to Asana'
+                  )}
+                </button>
+              )}
+            </div>
           )}
         </div>
 
-        {summary ? (
-          <>
-            <SprintSummaryView summary={summary} />
+        {/* Status banners */}
+        {summary && sendStatus === 'confirm' && (
+          <Card className="mb-6 flex flex-col sm:flex-row sm:items-center gap-3">
+            <p className="text-sm text-slate-300 flex-1">
+              Create a <span className="text-slate-100 font-medium">Sprint Summary</span>{' '}
+              task in Asana and post the summary + task lists as comments?
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setSendStatus('idle')}
+                className="px-4 py-2 rounded-lg border border-white/20 text-slate-300 hover:bg-white/10 transition-all text-sm font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSend}
+                className="neon-btn px-5 py-2 rounded-lg text-white text-sm font-semibold"
+              >
+                Confirm &amp; Send
+              </button>
+            </div>
+          </Card>
+        )}
 
-            {/* Send-to-Asana action area */}
-            <Card className="mt-6">
-              {sendStatus === 'success' && sendResult ? (
-                <div className="rounded-lg border border-emerald-500/50 bg-emerald-500/10 p-4">
-                  <h3 className="font-semibold text-emerald-400 mb-1">
-                    Sent to Asana
-                  </h3>
-                  <p className="text-sm text-slate-300">
-                    Created task <span className="text-slate-100">{`Sprint Summary: ${summary.sprintId}`}</span>
-                    {typeof sendResult.commentsPosted === 'number' && (
-                      <> with {sendResult.commentsPosted} comment(s).</>
-                    )}
-                  </p>
-                  {sendResult.taskUrl && (
-                    <a
-                      href={sendResult.taskUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-block mt-3 text-cyan-300 hover:text-cyan-200 hover:underline text-sm font-medium"
-                    >
-                      Open task in Asana →
-                    </a>
-                  )}
-                </div>
-              ) : (
-                <div className="flex flex-col gap-4">
-                  {sendStatus === 'error' && sendResult && (
-                    <div className="rounded-lg border border-red-500/50 bg-red-500/10 p-3">
-                      <p className="text-sm text-red-400">
-                        Failed to send: {sendResult.error || 'Unknown error'}
-                        {typeof sendResult.commentsPosted === 'number' &&
-                          sendResult.commentsPosted > 0 && (
-                            <> ({sendResult.commentsPosted} comment(s) were posted before the failure)</>
-                          )}
-                      </p>
-                    </div>
-                  )}
-
-                  {sendStatus === 'confirm' ? (
-                    <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-                      <p className="text-sm text-slate-300 flex-1">
-                        Create a <span className="text-slate-100 font-medium">Sprint Summary</span> task
-                        in Asana and post the summary + task lists as comments?
-                      </p>
-                      <div className="flex gap-3">
-                        <button
-                          onClick={() => setSendStatus('idle')}
-                          className="px-4 py-2 rounded-lg border border-white/20 text-slate-300 hover:bg-white/10 transition-all text-sm font-medium"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          onClick={handleSend}
-                          className="neon-btn px-5 py-2 rounded-lg text-white text-sm font-semibold"
-                        >
-                          Confirm &amp; Send
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => setSendStatus('confirm')}
-                      disabled={sendStatus === 'sending'}
-                      className="neon-btn self-start px-6 py-3 rounded-lg font-semibold text-white disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                    >
-                      {sendStatus === 'sending' ? (
-                        <span className="flex items-center justify-center gap-2">
-                          <span className="animate-spin rounded-full h-4 w-4 border-2 border-white/30 border-t-white" />
-                          Sending to Asana...
-                        </span>
-                      ) : (
-                        'Send to Asana'
-                      )}
-                    </button>
-                  )}
-                </div>
+        {summary && sendStatus === 'success' && sendResult && (
+          <Card className="mb-6 border border-emerald-500/50 bg-emerald-500/10">
+            <h3 className="font-semibold text-emerald-400 mb-1">Sent to Asana</h3>
+            <p className="text-sm text-slate-300">
+              Created task{' '}
+              <span className="text-slate-100">{`Sprint Summary: ${summary.sprintId}`}</span>
+              {typeof sendResult.commentsPosted === 'number' && (
+                <> with {sendResult.commentsPosted} comment(s).</>
               )}
-            </Card>
-          </>
+            </p>
+            {sendResult.taskUrl && (
+              <a
+                href={sendResult.taskUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-block mt-3 text-cyan-300 hover:text-cyan-200 hover:underline text-sm font-medium"
+              >
+                Open task in Asana →
+              </a>
+            )}
+          </Card>
+        )}
+
+        {summary && sendStatus === 'error' && sendResult && (
+          <Card className="mb-6 border border-red-500/50 bg-red-500/10">
+            <p className="text-sm text-red-400">
+              Failed to send: {sendResult.error || 'Unknown error'}
+              {typeof sendResult.commentsPosted === 'number' &&
+                sendResult.commentsPosted > 0 && (
+                  <> ({sendResult.commentsPosted} comment(s) were posted before the failure)</>
+                )}
+            </p>
+          </Card>
+        )}
+
+        {/* Summary content */}
+        {summary ? (
+          <SprintSummaryView summary={summary} />
         ) : (
           !dialogOpen && (
             <Card className="text-center">

@@ -356,21 +356,25 @@ export async function createAsanaTask(
 /**
  * Post a single comment (story) to a task. Never throws — returns a result
  * carrying Asana's error text on failure (so callers can detect "too large").
- * Ports GAS postCommentToAsana.
+ * Pass `asHtml` to send Asana rich text (`html_text`, must be wrapped in
+ * <body>…</body>) instead of plain `text`.
  */
 export async function postCommentToTask(
   taskGid: string,
   comment: string,
+  asHtml = false,
 ): Promise<PostCommentResult> {
   if (!comment || !comment.trim()) {
     return { success: false, error: 'Empty comment' };
   }
 
+  const data = asHtml ? { html_text: comment } : { text: comment };
+
   try {
     const response = await fetch(`${ASANA_BASE_URL}/tasks/${taskGid}/stories`, {
       method: 'POST',
       headers: getHeaders(),
-      body: JSON.stringify({ data: { text: comment } }),
+      body: JSON.stringify({ data }),
     });
 
     if (response.status !== 201) {
@@ -394,74 +398,130 @@ function getByteLength(str: string): number {
   return bytes;
 }
 
-/**
- * Post a labeled list of task URLs to a task as one or more comments, splitting
- * into byte-bounded chunks (Asana rejects oversized comments). Ports GAS
- * postListInChunks: 50 KB target, "(Part N of M)" headings, and a split-and-retry
- * fallback if Asana still reports a chunk as "too large". Returns the number of
- * comments successfully posted.
- */
-export async function postListInChunks(
-  taskGid: string,
-  items: string[],
-  label: string,
-): Promise<number> {
-  const MAX_BYTES = 50000;
-  const chunks: string[][] = [];
-  let currentChunk: string[] = [];
-  let currentSize = 0;
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
 
-  for (const item of items) {
-    const itemSize = getByteLength(item + '\n');
-    if (currentSize + itemSize > MAX_BYTES && currentChunk.length > 0) {
-      chunks.push(currentChunk);
-      currentChunk = [];
+/** A task shown as a hyperlinked title (or plain title when it has no URL). */
+export interface GroupTask {
+  title: string;
+  url: string;
+}
+
+/** Tasks for one assignee within a list. */
+export interface TaskGroup {
+  assignee: string;
+  tasks: GroupTask[];
+}
+
+/** Render a single <li> for a task — hyperlinked when it has a URL. */
+function renderTaskItem(t: GroupTask): string {
+  const title = escapeHtml(t.title);
+  return t.url
+    ? `<li><a href="${escapeHtml(t.url)}">${title}</a></li>`
+    : `<li>${title}</li>`;
+}
+
+/** Render one assignee group: "<strong>Name (n):</strong><ol>…</ol>". */
+function renderGroup(assignee: string, tasks: GroupTask[]): string {
+  const items = tasks.map(renderTaskItem).join('');
+  return `<strong>${escapeHtml(assignee)} (${tasks.length}):</strong><ol>${items}</ol>`;
+}
+
+/**
+ * Build the Asana rich-text (`html_text`) comment bodies for a grouped task list.
+ * Pure (no I/O) so it can be unit-tested. Packs whole assignee groups into
+ * byte-bounded chunks (Asana rejects oversized comments); a single group too
+ * large for one comment is split across comments by its items (header repeats).
+ * Each returned string is a complete <body>…</body> ready to post. Empty groups
+ * are dropped; an empty/all-empty input yields [].
+ */
+export function buildGroupedListHtmlChunks(
+  label: string,
+  groups: TaskGroup[],
+): string[] {
+  const nonEmpty = groups.filter((g) => g.tasks.length > 0);
+  if (nonEmpty.length === 0) return [];
+
+  // Leave headroom under the 50 KB comment limit for the <body> + label wrapper.
+  const MAX_BYTES = 45000;
+
+  // Turn groups into rendered fragments, splitting any single oversized group.
+  const fragments: string[] = [];
+  for (const g of nonEmpty) {
+    const full = renderGroup(g.assignee, g.tasks);
+    if (getByteLength(full) <= MAX_BYTES) {
+      fragments.push(full);
+      continue;
+    }
+    // Oversized single group: chunk its items (header repeats each part).
+    let batch: GroupTask[] = [];
+    let batchSize = 0;
+    const flush = () => {
+      if (batch.length) fragments.push(renderGroup(g.assignee, batch));
+      batch = [];
+      batchSize = 0;
+    };
+    for (const t of g.tasks) {
+      const size = getByteLength(renderTaskItem(t));
+      if (batchSize + size > MAX_BYTES && batch.length) flush();
+      batch.push(t);
+      batchSize += size;
+    }
+    flush();
+  }
+
+  // Pack fragments into chunks under the limit.
+  const chunks: string[][] = [];
+  let current: string[] = [];
+  let currentSize = 0;
+  for (const frag of fragments) {
+    const size = getByteLength(frag);
+    if (currentSize + size > MAX_BYTES && current.length) {
+      chunks.push(current);
+      current = [];
       currentSize = 0;
     }
-    currentChunk.push(item);
-    currentSize += itemSize;
+    current.push(frag);
+    currentSize += size;
   }
-  if (currentChunk.length > 0) chunks.push(currentChunk);
+  if (current.length) chunks.push(current);
 
-  const totalChunks = chunks.length;
+  const total = chunks.length;
+  return chunks.map((frags, i) => {
+    const part = total > 1 ? ` (Part ${i + 1} of ${total})` : '';
+    return `<body><strong>${escapeHtml(label)}${part}</strong>${frags.join('')}</body>`;
+  });
+}
+
+/**
+ * Post grouped, per-assignee task lists to a task as Asana rich-text comments
+ * (hyperlinked titles). Returns the number of comments successfully posted.
+ */
+export async function postGroupedTaskListInChunks(
+  taskGid: string,
+  label: string,
+  groups: TaskGroup[],
+): Promise<number> {
+  const chunks = buildGroupedListHtmlChunks(label, groups);
   let posted = 0;
-  let chunkNumber = 1;
 
-  for (const chunk of chunks) {
-    const heading =
-      totalChunks === 1
-        ? `${label}:\n\n`
-        : `${label} (Part ${chunkNumber} of ${totalChunks}):\n\n`;
-    const chunkText = heading + chunk.join('\n');
-
+  for (let i = 0; i < chunks.length; i++) {
     let success = false;
     for (let retry = 0; retry < 3 && !success; retry++) {
-      const result = await postCommentToTask(taskGid, chunkText);
+      const result = await postCommentToTask(taskGid, chunks[i], true);
       if (result.success) {
         success = true;
         posted++;
-      } else if (result.error && result.error.includes('too large')) {
-        // Split this chunk in half and post both halves, then move on.
-        const mid = Math.floor(chunk.length / 2);
-        const first = `${label} (Part ${chunkNumber} of ${totalChunks + 1}):\n\n${chunk
-          .slice(0, mid)
-          .join('\n')}`;
-        const second = `${label} (Part ${chunkNumber + 1} of ${totalChunks + 1}):\n\n${chunk
-          .slice(mid)
-          .join('\n')}`;
-        const r1 = await postCommentToTask(taskGid, first);
-        await sleep(1000);
-        const r2 = await postCommentToTask(taskGid, second);
-        if (r1.success) posted++;
-        if (r2.success) posted++;
-        success = true;
       } else if (retry < 2) {
         await sleep(2000);
       }
     }
-
-    if (chunkNumber < totalChunks) await sleep(1000);
-    chunkNumber++;
+    if (i < chunks.length - 1) await sleep(1000);
   }
 
   return posted;

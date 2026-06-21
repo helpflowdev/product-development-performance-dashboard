@@ -1,22 +1,32 @@
 import { SprintRow } from '@/types/sprint';
-import { AssigneeSummary, SprintSummaryResponse } from '@/types/sprint-summary';
+import {
+  AssigneeSummary,
+  AssigneeTaskGroup,
+  SprintSummaryResponse,
+  TaskRef,
+} from '@/types/sprint-summary';
 import { getUniqueSprints } from './burndown-engine';
 
 /**
- * Sprint Summary engine — pure port of the legacy Google Apps Script
- * `SprintPlanning.generateEnhancedSprintSummary`.
+ * Sprint Summary engine.
  *
- * Given all sprint rows (already mapped + Augment-filtered by row-mapper) and a
- * selected sprint name, it computes the totals, completion rate, hours, the
- * per-assignee breakdown, and the Completed / Transferred / Next-Sprint task-URL
- * lists. No I/O — the API route fetches the rows and hands them in.
+ * Computes, for a selected sprint: the plotted/completed/carried-over counts,
+ * completion rate, hours, a per-assignee breakdown, and the Completed /
+ * Carried-Over / Incomplete / Next-Sprint task lists (each grouped by assignee
+ * with task titles for hyperlinked display). No I/O — the route hands in rows.
+ *
+ * Definitions (confirmed with the team):
+ *   - Carried Over: the same Asana task (by link) also appears in the NEXT sprint.
+ *   - Completed:    status "Complete" AND not carried over.
+ *   - Incomplete:   not "Complete" AND not carried over.
+ *   - Plotted:      all non-recurring tasks in the sprint (= the three buckets).
+ * Recurring (DT)/(WT)/(ST) tasks are excluded from every count and list.
  */
 
 /**
- * Display/order source of truth for known team members, ported verbatim from
- * the script's `nameOrder`. A row's assignee is matched to one of these names
- * by a case-insensitive whole-word match against the assignee's full name.
- * Anyone not matched here is treated as an "other" assignee.
+ * Display/order source of truth for known team members (from the legacy macro's
+ * `nameOrder`). A row's assignee is matched to one of these by a case-insensitive
+ * whole-word match against the full name; anyone else is an "other" assignee.
  */
 const NAME_ORDER = [
   'Krasimir',
@@ -32,6 +42,16 @@ const NAME_ORDER = [
   'Sing',
 ] as const;
 
+const NAME_ORDER_SET = new Set<string>(NAME_ORDER);
+
+/** Recurring markers — planned but auto-respawned, excluded from the summary. */
+const RECURRING_MARKER = /\((?:DT|WT|ST)\)/i;
+function isRecurring(row: SprintRow): boolean {
+  return (
+    RECURRING_MARKER.test(row.recurringTask) || RECURRING_MARKER.test(row.tasksTitle)
+  );
+}
+
 interface MutableAssignee {
   total: number;
   completed: number;
@@ -40,47 +60,67 @@ interface MutableAssignee {
 }
 
 /**
- * Resolve a row's display assignee, matching the script's logic:
- *  - whole-word match against NAME_ORDER (case-insensitive) → canonical name
- *  - otherwise the raw email (if it looks like one) or the capitalized first name
- *  - blank assignee → "Unknown"
- * Returns the resolved name and whether it's a known (NAME_ORDER) member.
+ * Resolve a row's display assignee (canonical NAME_ORDER name, else email or
+ * capitalized first name, else "Unknown") — ported from the macro.
  */
-function resolveAssignee(assigneeFullName: string): {
-  name: string;
-  isKnown: boolean;
-} {
-  if (!assigneeFullName) return { name: 'Unknown', isKnown: false };
+function resolveAssignee(assigneeFullName: string): string {
+  if (!assigneeFullName) return 'Unknown';
 
   const words = assigneeFullName.toLowerCase().trim().split(/\s+/);
   const match = NAME_ORDER.find((n) => words.includes(n.toLowerCase()));
-  if (match) return { name: match, isKnown: true };
+  if (match) return match;
 
-  if (assigneeFullName.includes('@')) {
-    return { name: assigneeFullName, isKnown: false };
-  }
+  if (assigneeFullName.includes('@')) return assigneeFullName;
 
   const first = assigneeFullName.split(/\s+/)[0] ?? assigneeFullName;
-  const capitalized =
-    first.charAt(0).toUpperCase() + first.slice(1).toLowerCase();
-  return { name: capitalized, isKnown: false };
+  return first.charAt(0).toUpperCase() + first.slice(1).toLowerCase();
+}
+
+/** Canonical assignee order: known team (NAME_ORDER) → others (alpha) → Unknown. */
+function canonicalOrder(names: Iterable<string>): string[] {
+  const present = new Set(names);
+  const known = NAME_ORDER.filter((n) => present.has(n));
+  const others = [...present]
+    .filter((n) => !NAME_ORDER_SET.has(n) && n !== 'Unknown')
+    .sort();
+  const unknown = present.has('Unknown') ? ['Unknown'] : [];
+  return [...known, ...others, ...unknown];
+}
+
+/** Group {assignee, ref} pairs into per-assignee task groups in canonical order. */
+function groupByAssignee(
+  items: { assignee: string; ref: TaskRef }[],
+): AssigneeTaskGroup[] {
+  const map = new Map<string, TaskRef[]>();
+  for (const { assignee, ref } of items) {
+    if (!map.has(assignee)) map.set(assignee, []);
+    map.get(assignee)!.push(ref);
+  }
+  return canonicalOrder(map.keys()).map((assignee) => ({
+    assignee,
+    tasks: map.get(assignee)!,
+  }));
+}
+
+/** A task's display title (falls back to the URL when the title is blank). */
+function taskRef(row: SprintRow): TaskRef {
+  const url = row.linkToTask.trim();
+  const title = row.tasksTitle.trim() || url || '(untitled task)';
+  return { title, url };
 }
 
 /**
- * Resolve the sprint whose start date is the smallest one strictly greater than
- * the selected sprint's start date. Reuses getUniqueSprints (reverse-chrono,
- * normalized YYYY-MM-DD start dates) so date parsing/ordering lives in one place.
- * Returns null if the selected sprint has no known start date or is the newest.
+ * Resolve the next sprint name (smallest start date strictly greater than the
+ * selected sprint's). Reuses getUniqueSprints for date parsing/ordering.
  */
 function resolveNextSprintName(
   allRows: SprintRow[],
   selectedSprint: string,
 ): string | null {
-  const sprints = getUniqueSprints(allRows); // sorted newest-first
+  const sprints = getUniqueSprints(allRows); // newest-first, YYYY-MM-DD dates
   const selected = sprints.find((s) => s.id === selectedSprint);
   if (!selected) return null;
 
-  // YYYY-MM-DD strings compare lexicographically in chronological order.
   let next: { id: string; startDate: string } | null = null;
   for (const s of sprints) {
     if (s.startDate <= selected.startDate) continue;
@@ -94,102 +134,103 @@ export function computeSprintSummary(
   selectedSprint: string,
 ): SprintSummaryResponse {
   const target = selectedSprint.trim();
-  const tasks = allRows.filter((r) => r.sprint.trim() === target);
-  if (tasks.length === 0) {
+  const sprintTasks = allRows.filter((r) => r.sprint.trim() === target);
+  if (sprintTasks.length === 0) {
     throw new Error(`No tasks found for sprint: ${selectedSprint}`);
   }
 
-  let totalTasks = 0;
-  let completedTasks = 0;
+  // Resolve the next sprint and the set of task links plotted there. A selected-
+  // sprint task whose link is in this set was carried over / added to the next sprint.
+  const nextSprintName = resolveNextSprintName(allRows, target);
+  const nextSprintRows = nextSprintName
+    ? allRows.filter((r) => r.sprint.trim() === nextSprintName && !isRecurring(r))
+    : [];
+  const nextSprintLinks = new Set<string>();
+  for (const r of nextSprintRows) {
+    const link = r.linkToTask.trim();
+    if (link) nextSprintLinks.add(link);
+  }
+
+  const metrics: Record<string, MutableAssignee> = {};
+  const completedItems: { assignee: string; ref: TaskRef }[] = [];
+  const carriedOverItems: { assignee: string; ref: TaskRef }[] = [];
+  const incompleteItems: { assignee: string; ref: TaskRef }[] = [];
+
   let totalHoursEstimate = 0;
   let totalHoursActual = 0;
 
-  const metrics: Record<string, MutableAssignee> = {};
-  const otherAssignees = new Set<string>();
-  const completedTaskUrls: string[] = [];
-  const transferredTaskUrls: string[] = [];
+  for (const row of sprintTasks) {
+    if (isRecurring(row)) continue; // recurring excluded from the summary
 
-  for (const row of tasks) {
-    const status = row.status.trim();
-    const { name, isKnown } = resolveAssignee(row.assigneeName.trim());
-    if (!isKnown && name !== 'Unknown') otherAssignees.add(name);
+    const assignee = resolveAssignee(row.assigneeName.trim());
+    const link = row.linkToTask.trim();
+    const isComplete = row.status.trim() === 'Complete';
+    const carriedOver = link.length > 0 && nextSprintLinks.has(link);
+    const completed = isComplete && !carriedOver;
 
     const hoursEstimate = parseFloat(row.hoursEstimate) || 0;
     const hoursActual = parseFloat(row.hoursActual) || 0;
-    const isRecurring = row.recurringTask.trim().length > 0;
-
-    totalTasks++;
     totalHoursEstimate += hoursEstimate;
     totalHoursActual += hoursActual;
 
-    if (!metrics[name]) {
-      metrics[name] = { total: 0, completed: 0, hoursEstimate: 0, hoursActual: 0 };
+    if (!metrics[assignee]) {
+      metrics[assignee] = { total: 0, completed: 0, hoursEstimate: 0, hoursActual: 0 };
     }
-    metrics[name].total++;
-    metrics[name].hoursEstimate += hoursEstimate;
-    metrics[name].hoursActual += hoursActual;
+    metrics[assignee].total++;
+    metrics[assignee].hoursEstimate += hoursEstimate;
+    metrics[assignee].hoursActual += hoursActual;
+    if (completed) metrics[assignee].completed++;
 
-    if (status === 'Complete') {
-      completedTasks++;
-      metrics[name].completed++;
-      if (!isRecurring) completedTaskUrls.push(row.linkToTask);
-    } else if (!isRecurring) {
-      transferredTaskUrls.push(row.linkToTask);
-    }
+    const ref = taskRef(row);
+    if (carriedOver) carriedOverItems.push({ assignee, ref });
+    else if (completed) completedItems.push({ assignee, ref });
+    else incompleteItems.push({ assignee, ref });
   }
 
-  // Build the ordered assignee list: known members (in NAME_ORDER) first, then
-  // any other assignees alphabetically. Only assignees with at least one task
-  // are emitted. (Faithful quirk: "Unknown" contributes to totals but is never
-  // listed, since it's neither in NAME_ORDER nor added to otherAssignees.)
-  const toSummary = (name: string): AssigneeSummary => {
-    const m = metrics[name];
-    return {
-      name,
-      total: m.total,
-      completed: m.completed,
-      completionRate: (m.completed / m.total) * 100,
-      hoursEstimate: m.hoursEstimate,
-      hoursActual: m.hoursActual,
-    };
-  };
+  const plottedCount =
+    completedItems.length + carriedOverItems.length + incompleteItems.length;
 
-  const assignees: AssigneeSummary[] = [
-    ...NAME_ORDER.filter((n) => metrics[n] && metrics[n].total > 0),
-    ...Array.from(otherAssignees)
-      .sort()
-      .filter((n) => metrics[n] && metrics[n].total > 0),
-  ].map(toSummary);
+  // Per-assignee breakdown in canonical order (only assignees with tasks).
+  const assignees: AssigneeSummary[] = canonicalOrder(Object.keys(metrics)).map(
+    (name) => {
+      const m = metrics[name];
+      return {
+        name,
+        total: m.total,
+        completed: m.completed,
+        completionRate: m.total > 0 ? (m.completed / m.total) * 100 : 0,
+        hoursEstimate: m.hoursEstimate,
+        hoursActual: m.hoursActual,
+      };
+    },
+  );
 
-  // Next sprint: resolve by date, then pull its (non-recurring) tasks by name.
-  const nextSprintName = resolveNextSprintName(allRows, target);
-  const nextSprintTaskUrls: string[] = [];
-  let warning: string | null = null;
-
-  if (nextSprintName) {
-    for (const row of allRows) {
-      if (row.sprint.trim() !== nextSprintName) continue;
-      if (row.recurringTask.trim().length > 0) continue; // DT/recurring excluded
-      nextSprintTaskUrls.push(row.linkToTask);
-    }
-  } else {
-    warning =
-      'Next sprint not found — sync the next sprint into the data, then regenerate.';
-  }
+  // Next-sprint task list, grouped by assignee (all statuses).
+  const nextSprintTasks = groupByAssignee(
+    nextSprintRows.map((r) => ({
+      assignee: resolveAssignee(r.assigneeName.trim()),
+      ref: taskRef(r),
+    })),
+  );
 
   return {
     sprintId: target,
-    totalTasks,
-    completedTasks,
-    completionRate: (completedTasks / totalTasks) * 100,
+    plottedCount,
+    completedCount: completedItems.length,
+    carriedOverCount: carriedOverItems.length,
+    incompleteCount: incompleteItems.length,
+    completionRate: plottedCount > 0 ? (completedItems.length / plottedCount) * 100 : 0,
     totalHoursEstimate,
     totalHoursActual,
     assignees,
-    completedTaskUrls,
-    transferredTaskUrls,
+    completedTasks: groupByAssignee(completedItems),
+    carriedOverTasks: groupByAssignee(carriedOverItems),
+    incompleteTasks: groupByAssignee(incompleteItems),
     nextSprintName,
-    nextSprintTaskUrls,
-    warning,
+    nextSprintTasks,
+    warning: nextSprintName
+      ? null
+      : 'Next sprint not found — carry-over detection is off until the next sprint is synced into the data.',
     computedAt: new Date().toISOString(),
   };
 }

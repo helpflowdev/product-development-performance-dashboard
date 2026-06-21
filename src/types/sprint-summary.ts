@@ -1,16 +1,30 @@
 /**
  * Sprint Summary types.
  *
- * Mirrors the output of the legacy Google Apps Script
- * `SprintPlanning.generateEnhancedSprintSummary` — totals, completion rate,
- * hours, a per-assignee breakdown, and the Completed / Transferred / Next-Sprint
- * task-URL lists. Computed by `src/lib/sprint-summary-engine.ts`.
+ * Evolved from the legacy Google Apps Script macro. Task lists are now grouped
+ * per assignee and carry the task title (for hyperlinked display), and the
+ * completed/carried-over split is sprint-aware:
+ *   - Carried Over = the same Asana task also appears in the NEXT sprint.
+ *   - Completed    = status "Complete" AND not carried over.
+ * Computed by `src/lib/sprint-summary-engine.ts`.
  */
 
+/** A single task shown as a hyperlinked title. */
+export interface TaskRef {
+  title: string;
+  url: string;
+}
+
+/** Tasks for one assignee within a list (e.g. all of Gio's completed tasks). */
+export interface AssigneeTaskGroup {
+  assignee: string;
+  tasks: TaskRef[];
+}
+
 /**
- * Per-assignee roll-up for a single sprint.
- * `hoursEstimate`/`hoursActual` are kept raw; the UI and the Asana comment
- * round them with Math.ceil at display time (matching the script).
+ * Per-assignee roll-up for the breakdown table.
+ * `completed` follows the sprint-aware definition (Complete AND not carried over).
+ * `total` is the assignee's plotted (non-recurring) task count.
  */
 export interface AssigneeSummary {
   name: string;
@@ -22,31 +36,40 @@ export interface AssigneeSummary {
 }
 
 /**
- * Full computed summary for one sprint.
+ * Full computed summary for one sprint. All counts/lists cover non-recurring
+ * ("plotted") tasks only; recurring (DT)/(WT)/(ST) tasks are excluded.
  */
 export interface SprintSummaryResponse {
   sprintId: string;
-  totalTasks: number;
-  completedTasks: number;
-  completionRate: number; // (completedTasks / totalTasks) * 100
+
+  plottedCount: number; // total non-recurring tasks plotted in the sprint
+  completedCount: number; // Complete AND not carried over
+  carriedOverCount: number; // also appears in the next sprint
+  incompleteCount: number; // not Complete AND not carried over
+  completionRate: number; // completedCount / plottedCount * 100
+
   totalHoursEstimate: number;
   totalHoursActual: number;
-  // Ordered: known team members (NAME_ORDER, with tasks) first, then any other
-  // assignees sorted alphabetically.
+
+  // Per-assignee breakdown, ordered: known team members first, then others, Unknown last.
   assignees: AssigneeSummary[];
-  completedTaskUrls: string[]; // status "Complete", non-recurring
-  transferredTaskUrls: string[]; // not complete, non-recurring
+
+  // Task lists, each grouped by assignee in the same canonical order.
+  completedTasks: AssigneeTaskGroup[];
+  carriedOverTasks: AssigneeTaskGroup[]; // added to the next sprint (any status)
+  incompleteTasks: AssigneeTaskGroup[]; // unfinished and not carried over
+
   nextSprintName: string | null;
-  nextSprintTaskUrls: string[]; // all statuses, non-recurring (DT excluded)
-  // Set when the next sprint can't be resolved (e.g. not yet synced). When this
-  // is non-null, nextSprintName is null and nextSprintTaskUrls is empty.
+  nextSprintTasks: AssigneeTaskGroup[]; // the next sprint's full plotted list
+
+  // Set when the next sprint can't be resolved (e.g. not yet synced). Carry-over
+  // detection can't run without it, so carriedOver falls back to empty.
   warning: string | null;
+
   computedAt: string; // ISO timestamp
 }
 
-/**
- * Result of pushing a summary to Asana.
- */
+/** Result of pushing a summary to Asana. */
 export interface SendToAsanaResult {
   success: boolean;
   sprintId: string;
