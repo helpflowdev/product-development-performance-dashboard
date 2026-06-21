@@ -316,6 +316,157 @@ export async function fetchTaskAddedToProjectDate(
   return { date: '', error: 'HTTP 429 (retries exhausted)' };
 }
 
+// ─── Write operations (used by Sprint Summary → Asana) ───────────────────────
+
+/** Outcome of a single comment post. `error` carries Asana's response text. */
+export interface PostCommentResult {
+  success: boolean;
+  error?: string;
+}
+
+/**
+ * Create a task in the given project and return its gid + permalink.
+ * Ports the GAS sendSprintSummaryToAsana task-creation step.
+ */
+export async function createAsanaTask(
+  projectGid: string,
+  name: string,
+): Promise<{ gid: string; permalinkUrl: string }> {
+  const url = `${ASANA_BASE_URL}/tasks?opt_fields=permalink_url,name`;
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify({ data: { name, projects: [projectGid] } }),
+  });
+
+  const json = await response.json().catch(() => ({}));
+  if (response.status !== 201) {
+    const message = json?.errors?.[0]?.message ?? `HTTP ${response.status}`;
+    throw new Error(`Failed to create Asana task: ${message}`);
+  }
+
+  const gid = json.data.gid as string;
+  // permalink_url is returned thanks to opt_fields; fall back to a constructed URL.
+  const permalinkUrl =
+    (json.data.permalink_url as string | undefined) ??
+    `https://app.asana.com/0/0/${gid}`;
+  return { gid, permalinkUrl };
+}
+
+/**
+ * Post a single comment (story) to a task. Never throws — returns a result
+ * carrying Asana's error text on failure (so callers can detect "too large").
+ * Ports GAS postCommentToAsana.
+ */
+export async function postCommentToTask(
+  taskGid: string,
+  comment: string,
+): Promise<PostCommentResult> {
+  if (!comment || !comment.trim()) {
+    return { success: false, error: 'Empty comment' };
+  }
+
+  try {
+    const response = await fetch(`${ASANA_BASE_URL}/tasks/${taskGid}/stories`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify({ data: { text: comment } }),
+    });
+
+    if (response.status !== 201) {
+      return { success: false, error: await response.text() };
+    }
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: String(error) };
+  }
+}
+
+/**
+ * Byte length under the script's convention: ASCII = 1 byte, anything else = 2.
+ * (Approximate, but matches the GAS getByteLength used to size comment chunks.)
+ */
+function getByteLength(str: string): number {
+  let bytes = 0;
+  for (let i = 0; i < str.length; i++) {
+    bytes += str.charCodeAt(i) < 128 ? 1 : 2;
+  }
+  return bytes;
+}
+
+/**
+ * Post a labeled list of task URLs to a task as one or more comments, splitting
+ * into byte-bounded chunks (Asana rejects oversized comments). Ports GAS
+ * postListInChunks: 50 KB target, "(Part N of M)" headings, and a split-and-retry
+ * fallback if Asana still reports a chunk as "too large". Returns the number of
+ * comments successfully posted.
+ */
+export async function postListInChunks(
+  taskGid: string,
+  items: string[],
+  label: string,
+): Promise<number> {
+  const MAX_BYTES = 50000;
+  const chunks: string[][] = [];
+  let currentChunk: string[] = [];
+  let currentSize = 0;
+
+  for (const item of items) {
+    const itemSize = getByteLength(item + '\n');
+    if (currentSize + itemSize > MAX_BYTES && currentChunk.length > 0) {
+      chunks.push(currentChunk);
+      currentChunk = [];
+      currentSize = 0;
+    }
+    currentChunk.push(item);
+    currentSize += itemSize;
+  }
+  if (currentChunk.length > 0) chunks.push(currentChunk);
+
+  const totalChunks = chunks.length;
+  let posted = 0;
+  let chunkNumber = 1;
+
+  for (const chunk of chunks) {
+    const heading =
+      totalChunks === 1
+        ? `${label}:\n\n`
+        : `${label} (Part ${chunkNumber} of ${totalChunks}):\n\n`;
+    const chunkText = heading + chunk.join('\n');
+
+    let success = false;
+    for (let retry = 0; retry < 3 && !success; retry++) {
+      const result = await postCommentToTask(taskGid, chunkText);
+      if (result.success) {
+        success = true;
+        posted++;
+      } else if (result.error && result.error.includes('too large')) {
+        // Split this chunk in half and post both halves, then move on.
+        const mid = Math.floor(chunk.length / 2);
+        const first = `${label} (Part ${chunkNumber} of ${totalChunks + 1}):\n\n${chunk
+          .slice(0, mid)
+          .join('\n')}`;
+        const second = `${label} (Part ${chunkNumber + 1} of ${totalChunks + 1}):\n\n${chunk
+          .slice(mid)
+          .join('\n')}`;
+        const r1 = await postCommentToTask(taskGid, first);
+        await sleep(1000);
+        const r2 = await postCommentToTask(taskGid, second);
+        if (r1.success) posted++;
+        if (r2.success) posted++;
+        success = true;
+      } else if (retry < 2) {
+        await sleep(2000);
+      }
+    }
+
+    if (chunkNumber < totalChunks) await sleep(1000);
+    chunkNumber++;
+  }
+
+  return posted;
+}
+
 /**
  * Fetch all tasks for a project (paginated).
  * Ports GAS lines 193-215.

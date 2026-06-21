@@ -15,6 +15,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Sprint Completion Rate', href: '/completion-rate', icon: '✅' },
   { label: 'Individual Completion Rate', href: '/individual-cr', icon: '👤' },
   { label: 'Sprint Planning Hours', href: '/sprint-planning', icon: '🗓️' },
+  { label: 'Sprint Summary', href: '/sprint-summary', icon: '📝' },
   // Future sections
   // { label: 'Team Capacity', href: '/capacity', icon: '👥' },
   // { label: 'Velocity Trends', href: '/velocity', icon: '📈' },
