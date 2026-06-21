@@ -18,9 +18,24 @@ import {
 /** Asana project the summary task is created in (the legacy macro's project). */
 const DEFAULT_SUMMARY_PROJECT_ID = '514125768649585';
 
+/** Asana user the summary task is assigned to (Shann Bryle Rubido). */
+const DEFAULT_SUMMARY_ASSIGNEE_ID = '1166606777471938';
+
 /** Small pause between comment posts to stay clear of Asana rate limits. */
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Today's date as YYYY-MM-DD in the configured timezone (for Asana due_on). */
+function todayDateOnly(): string {
+  const tz = process.env.TIMEZONE ?? 'America/Los_Angeles';
+  // en-CA formats as YYYY-MM-DD, which is exactly Asana's due_on format.
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
 }
 
 /**
@@ -70,16 +85,23 @@ export async function sendSprintSummaryToAsana(
 ): Promise<SendToAsanaResult> {
   const projectId =
     process.env.ASANA_SUMMARY_PROJECT_ID ?? DEFAULT_SUMMARY_PROJECT_ID;
+  const assignee =
+    process.env.ASANA_SUMMARY_ASSIGNEE_ID ?? DEFAULT_SUMMARY_ASSIGNEE_ID;
   const taskTitle = `Sprint Summary: ${summary.sprintId}`;
 
   let commentsPosted = 0;
   try {
-    const { gid, permalinkUrl } = await createAsanaTask(projectId, taskTitle);
+    // Assigned to Shann Bryle Rubido, due today.
+    const { gid, permalinkUrl } = await createAsanaTask(projectId, taskTitle, {
+      assignee,
+      dueOn: todayDateOnly(),
+    });
 
-    // 1. Metrics + per-assignee breakdown (plain text).
+    // 1. Metrics + per-assignee breakdown (plain text), pinned to the top.
     const summaryResult = await postCommentToTask(
       gid,
       buildSummaryCommentText(summary),
+      { pinned: true },
     );
     if (summaryResult.success) commentsPosted++;
     await sleep(1000);

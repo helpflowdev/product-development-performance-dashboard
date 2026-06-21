@@ -326,17 +326,22 @@ export interface PostCommentResult {
 
 /**
  * Create a task in the given project and return its gid + permalink.
- * Ports the GAS sendSprintSummaryToAsana task-creation step.
+ * Optionally sets an assignee (user gid) and a due date (YYYY-MM-DD).
  */
 export async function createAsanaTask(
   projectGid: string,
   name: string,
+  opts: { assignee?: string; dueOn?: string } = {},
 ): Promise<{ gid: string; permalinkUrl: string }> {
   const url = `${ASANA_BASE_URL}/tasks?opt_fields=permalink_url,name`;
+  const data: Record<string, unknown> = { name, projects: [projectGid] };
+  if (opts.assignee) data.assignee = opts.assignee;
+  if (opts.dueOn) data.due_on = opts.dueOn;
+
   const response = await fetch(url, {
     method: 'POST',
     headers: getHeaders(),
-    body: JSON.stringify({ data: { name, projects: [projectGid] } }),
+    body: JSON.stringify({ data }),
   });
 
   const json = await response.json().catch(() => ({}));
@@ -356,19 +361,22 @@ export async function createAsanaTask(
 /**
  * Post a single comment (story) to a task. Never throws — returns a result
  * carrying Asana's error text on failure (so callers can detect "too large").
- * Pass `asHtml` to send Asana rich text (`html_text`, must be wrapped in
- * <body>…</body>) instead of plain `text`.
+ * Options: `asHtml` sends Asana rich text (`html_text`, wrapped in <body>…</body>)
+ * instead of plain `text`; `pinned` pins the comment to the top of the task.
  */
 export async function postCommentToTask(
   taskGid: string,
   comment: string,
-  asHtml = false,
+  opts: { asHtml?: boolean; pinned?: boolean } = {},
 ): Promise<PostCommentResult> {
   if (!comment || !comment.trim()) {
     return { success: false, error: 'Empty comment' };
   }
 
-  const data = asHtml ? { html_text: comment } : { text: comment };
+  const data: Record<string, unknown> = opts.asHtml
+    ? { html_text: comment }
+    : { text: comment };
+  if (opts.pinned) data.is_pinned = true;
 
   try {
     const response = await fetch(`${ASANA_BASE_URL}/tasks/${taskGid}/stories`, {
@@ -513,7 +521,7 @@ export async function postGroupedTaskListInChunks(
   for (let i = 0; i < chunks.length; i++) {
     let success = false;
     for (let retry = 0; retry < 3 && !success; retry++) {
-      const result = await postCommentToTask(taskGid, chunks[i], true);
+      const result = await postCommentToTask(taskGid, chunks[i], { asHtml: true });
       if (result.success) {
         success = true;
         posted++;
