@@ -62,6 +62,11 @@ export interface SprintSummaryResponse {
   nextSprintName: string | null;
   nextSprintTasks: AssigneeTaskGroup[]; // the next sprint's full plotted list
 
+  // Short AI-generated "what this sprint focused on" summary (non-recurring tasks
+  // only). null when ANTHROPIC_API_KEY isn't set or generation failed — the
+  // operator can still type a focus note manually before sending.
+  focusSummary: string | null;
+
   // Set when the next sprint can't be resolved (e.g. not yet synced). Carry-over
   // detection can't run without it, so carriedOver falls back to empty.
   warning: string | null;

@@ -31,6 +31,13 @@ export function buildSummaryCommentText(summary: SprintSummaryResponse): string 
   const lines: string[] = [
     'Sprint Summary',
     `Sprint: ${summary.sprintId}`,
+  ];
+
+  if (summary.focusSummary) {
+    lines.push('Focus:', summary.focusSummary);
+  }
+
+  lines.push(
     `Completed Tasks: ${summary.completedCount}`,
     `Plotted Tasks: ${summary.plottedCount}`,
     `Carried Over to Next Sprint: ${summary.carriedOverCount}`,
@@ -39,7 +46,7 @@ export function buildSummaryCommentText(summary: SprintSummaryResponse): string 
       summary.totalHoursEstimate,
     )} / ${formatHours(summary.totalHoursActual)}`,
     'Completed vs Plotted (per assignee):',
-  ];
+  );
 
   for (const a of summary.assignees) {
     lines.push(`${a.name}: ${a.completionRate.toFixed(2)}% (${a.completed}/${a.total})`);

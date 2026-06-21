@@ -44,6 +44,33 @@ const NAME_ORDER = [
 
 const NAME_ORDER_SET = new Set<string>(NAME_ORDER);
 
+/**
+ * Recurring-task markers (DT/WT/ST). The summary counts and lists these, but the
+ * AI focus summary excludes them — see getNonRecurringTaskTitles.
+ */
+const RECURRING_MARKER = /\((?:DT|WT|ST)\)/i;
+function isRecurring(row: SprintRow): boolean {
+  return RECURRING_MARKER.test(row.recurringTask) || RECURRING_MARKER.test(row.tasksTitle);
+}
+
+/**
+ * Distinct non-recurring task titles for a sprint — the input to the AI focus
+ * summary (recurring DT/WT/ST tasks excluded, blanks dropped, de-duplicated).
+ */
+export function getNonRecurringTaskTitles(
+  allRows: SprintRow[],
+  selectedSprint: string,
+): string[] {
+  const target = selectedSprint.trim();
+  const seen = new Set<string>();
+  for (const row of allRows) {
+    if (row.sprint.trim() !== target || isRecurring(row)) continue;
+    const title = row.tasksTitle.trim();
+    if (title) seen.add(title);
+  }
+  return [...seen];
+}
+
 interface MutableAssignee {
   total: number;
   completed: number;
@@ -269,6 +296,8 @@ export function computeSprintSummary(
     incompleteTasks: groupByAssignee(incompleteItems),
     nextSprintName,
     nextSprintTasks,
+    // Attached by the route after an async Claude call (pure engine stays sync).
+    focusSummary: null,
     warning: nextSprintName
       ? null
       : 'Next sprint not found — carry-over detection is off until the next sprint is synced into the data.',

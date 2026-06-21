@@ -17,7 +17,10 @@ export const maxDuration = 60;
  */
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
-    const body = (await request.json()) as { sprintId?: string };
+    const body = (await request.json()) as {
+      sprintId?: string;
+      focusSummary?: string;
+    };
     const sprintId = body.sprintId?.trim();
 
     if (!sprintId) {
@@ -32,6 +35,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     const summary = computeSprintSummary(sprintRows, sprintId);
+    // Task lists are recomputed server-side (don't trust the client), but the
+    // focus summary is reviewed/edited narrative text — use what the operator saw.
+    const focus = body.focusSummary?.trim();
+    summary.focusSummary = focus ? focus : null;
     const result = await sendSprintSummaryToAsana(summary);
 
     if (!result.success) {

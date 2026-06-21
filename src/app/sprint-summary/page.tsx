@@ -15,6 +15,8 @@ export default function SprintSummaryPage() {
   const [generating, setGenerating] = useState(false);
   const [generateError, setGenerateError] = useState<string | null>(null);
   const [summary, setSummary] = useState<SprintSummaryResponse | null>(null);
+  // Editable focus note — prefilled by the AI summary, sent to Asana on confirm.
+  const [focusText, setFocusText] = useState('');
 
   const [sendStatus, setSendStatus] = useState<SendStatus>('idle');
   const [sendResult, setSendResult] = useState<SendToAsanaResult | null>(null);
@@ -42,6 +44,7 @@ export default function SprintSummaryPage() {
       }
       const data: SprintSummaryResponse = await res.json();
       setSummary(data);
+      setFocusText(data.focusSummary ?? '');
       // New summary invalidates any previous send outcome.
       setSendStatus('idle');
       setSendResult(null);
@@ -61,7 +64,10 @@ export default function SprintSummaryPage() {
       const res = await fetch('/api/sprint-summary/send-to-asana', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sprintId: summary.sprintId }),
+        body: JSON.stringify({
+          sprintId: summary.sprintId,
+          focusSummary: focusText.trim() || undefined,
+        }),
       });
       const data: SendToAsanaResult = await res.json();
       if (!res.ok || !data.success) {
@@ -185,7 +191,30 @@ export default function SprintSummaryPage() {
 
         {/* Summary content */}
         {summary ? (
-          <SprintSummaryView summary={summary} />
+          <div className="space-y-4">
+            {/* Editable AI focus summary (also posted to Asana) */}
+            <Card>
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="font-semibold text-white">Sprint Focus</h3>
+                <span className="text-xs text-slate-500">
+                  AI-generated · editable · included when sent to Asana
+                </span>
+              </div>
+              <textarea
+                value={focusText}
+                onChange={(e) => setFocusText(e.target.value)}
+                rows={3}
+                placeholder={
+                  summary.focusSummary === null
+                    ? 'No AI summary (set ANTHROPIC_API_KEY to auto-generate). You can type a short focus note here.'
+                    : 'What did this sprint focus on?'
+                }
+                className="glass-input w-full px-3 py-2 rounded-lg text-sm text-slate-100 border border-white/20 hover:border-white/40 focus:border-cyan-400/50 focus:outline-none transition-all resize-y"
+              />
+            </Card>
+
+            <SprintSummaryView summary={summary} />
+          </div>
         ) : (
           !dialogOpen && (
             <Card className="text-center">
