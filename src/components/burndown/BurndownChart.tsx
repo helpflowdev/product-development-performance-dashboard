@@ -50,6 +50,19 @@ export function BurndownChart({ data, allottedPoints, sprintId }: BurndownChartP
     return <div className="text-center text-slate-300 py-8">No data to display</div>;
   }
 
+  // Let the actual-remaining line dip below zero when the sprint over-delivers
+  // (consumed > allotted). Keep 0 as the floor otherwise so the axis isn't
+  // needlessly stretched. Floor to a sensible step so the axis ticks stay round.
+  const minActual = data.reduce(
+    (min, d) =>
+      typeof d.actualRemainingSP === 'number' && d.actualRemainingSP < min
+        ? d.actualRemainingSP
+        : min,
+    0,
+  );
+  const step = allottedPoints >= 500 ? 50 : allottedPoints >= 100 ? 20 : 5;
+  const yMin = minActual < 0 ? Math.floor(minActual / step) * step : 0;
+
   return (
     <div className="w-full glass-card rounded-xl p-6">
       {sprintId && (
@@ -71,7 +84,7 @@ export function BurndownChart({ data, allottedPoints, sprintId }: BurndownChartP
               interval={Math.max(0, Math.floor(data.length / 12))}
             />
             <YAxis
-              domain={[0, allottedPoints]}
+              domain={[yMin, allottedPoints]}
               tick={{ fontSize: 12, fill: '#94a3b8' }}
               label={{
                 value: 'Story Points',

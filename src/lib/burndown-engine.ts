@@ -81,6 +81,80 @@ export function getUniqueSprints(rows: SprintRow[]): SprintMeta[] {
 }
 
 /**
+ * Sprint naming convention: "Sprint #YYYY.QX.SY (MMDD-MMDD)". Parsed into an
+ * orderable tuple so "the next sprint" is the next S within the quarter, rolling
+ * over to S1 of the next quarter — independent of how many sprints a quarter has.
+ */
+const SPRINT_NAME_RE = /Sprint\s*#(\d{4})\.Q(\d)\.S(\d+)/i;
+interface SprintOrder {
+  year: number;
+  quarter: number;
+  sprint: number;
+}
+function parseSprintOrder(name: string): SprintOrder | null {
+  const m = name.match(SPRINT_NAME_RE);
+  if (!m) return null;
+  return { year: +m[1], quarter: +m[2], sprint: +m[3] };
+}
+function compareOrder(a: SprintOrder, b: SprintOrder): number {
+  if (a.year !== b.year) return a.year - b.year;
+  if (a.quarter !== b.quarter) return a.quarter - b.quarter;
+  return a.sprint - b.sprint;
+}
+
+/**
+ * Resolve the next sprint's name relative to `selectedSprint`.
+ *
+ * Primary: by the naming convention — the smallest (year, quarter, sprint) tuple
+ * strictly greater than the selected sprint's, among the sprints present in the
+ * data. This handles S6 → S7 → (next quarter) S1 without depending on dates or
+ * knowing how many sprints a quarter has.
+ *
+ * Fallback (selected name doesn't parse, or no convention-named sprint follows):
+ * by start date via getUniqueSprints.
+ *
+ * Shared by the burndown engine (carry-over exclusion) and the sprint-summary
+ * engine (carried-over bucket) so both apply the same team-confirmed definition.
+ */
+export function resolveNextSprintName(
+  allRows: SprintRow[],
+  selectedSprint: string,
+): string | null {
+  const names = new Set<string>();
+  for (const r of allRows) {
+    const n = r.sprint.trim();
+    if (n) names.add(n);
+  }
+
+  const selOrder = parseSprintOrder(selectedSprint);
+  if (selOrder) {
+    let bestName: string | null = null;
+    let bestOrder: SprintOrder | null = null;
+    for (const name of names) {
+      if (name === selectedSprint) continue;
+      const o = parseSprintOrder(name);
+      if (!o || compareOrder(o, selOrder) <= 0) continue; // not strictly after
+      if (bestOrder === null || compareOrder(o, bestOrder) < 0) {
+        bestOrder = o;
+        bestName = name;
+      }
+    }
+    if (bestName) return bestName;
+  }
+
+  // Date-based fallback.
+  const sprints = getUniqueSprints(allRows); // newest-first, YYYY-MM-DD dates
+  const selected = sprints.find((s) => s.id === selectedSprint);
+  if (!selected) return null;
+  let next: { id: string; startDate: string } | null = null;
+  for (const s of sprints) {
+    if (s.startDate <= selected.startDate) continue;
+    if (next === null || s.startDate < next.startDate) next = s;
+  }
+  return next ? next.id : null;
+}
+
+/**
  * Build a unique key identifying an Asana task across sprints.
  * The task permalink (Link to Task) is the reliable unique identifier — the
  * same task synced into multiple sprint projects produces rows that share it.
@@ -161,6 +235,22 @@ export function computeBurndown(
     `[burndown] Sprint: ${firstRow.sprint}, Days: ${totalSprintDays}, Allotted: ${allottedPoints}, Daily Burn: ${dailyIdealBurn}`
   );
 
+  // The same Asana task can appear in this sprint AND the next (carried over /
+  // added forward). Per the team-confirmed definition (see sprint-summary-engine),
+  // such a task's points belong to the sprint it was carried INTO — so a
+  // "Complete" row whose task also appears in the next sprint is NOT counted as
+  // this sprint's consumption. Collect the task links present in the next sprint.
+  const currentSprint = firstRow.sprint?.trim() ?? '';
+  const nextSprintName = resolveNextSprintName(allRows, currentSprint);
+  const nextSprintLinks = new Set<string>();
+  if (nextSprintName) {
+    for (const r of allRows) {
+      if (r.sprint?.trim() !== nextSprintName) continue;
+      const link = r.linkToTask?.trim();
+      if (link) nextSprintLinks.add(link);
+    }
+  }
+
   // Build daily completion map
   const dailyCompletionMap = new Map<string, number>();
   const qaFlags: QAFlag[] = [];
@@ -175,6 +265,16 @@ export function computeBurndown(
           ...flagBase(row),
         });
       }
+      continue;
+    }
+
+    // Carried over / added to the NEXT sprint → its points are consumed by that
+    // sprint, not this one. Mirrors the Sprint Summary's team-confirmed rule
+    // ("Completed = Complete AND not carried over") so the two views agree. A
+    // late completion that was NOT pushed forward still counts here, even when it
+    // landed a few days after the sprint end (handled by the clamp further down).
+    const link = row.linkToTask?.trim();
+    if (link && nextSprintLinks.has(link)) {
       continue;
     }
 
@@ -202,7 +302,9 @@ export function computeBurndown(
 
     const dateStr = toDateString(burndownDate);
 
-    // Check if date is outside sprint window (warning, but still count it)
+    // A completion dated outside the sprint window is still counted — a task
+    // finished a few days late but never carried forward belongs to this sprint.
+    // We only surface it as a QA flag for visibility.
     if (isDateBefore(burndownDate, startDate) || isDateAfter(burndownDate, endDate)) {
       qaFlags.push({
         type: 'date_outside_sprint',
@@ -213,9 +315,20 @@ export function computeBurndown(
       });
     }
 
-    // Only add to daily completion and total if the completion date is on or before today
-    if (isDateBefore(burndownDate, completionCutoff) || toDateString(burndownDate) === toDateString(completionCutoff)) {
-      dailyCompletionMap.set(dateStr, (dailyCompletionMap.get(dateStr) ?? 0) + sp);
+    // Count it unless dated after today (an in-progress sprint shouldn't count
+    // future-dated completions). Attribute it to a day INSIDE the sprint window —
+    // a late/early completion is clamped to the last/first sprint day — so the
+    // burndown line's final point reflects every counted point. This guarantees
+    // totalConsumedPoints equals the chart's final cumulative, and the line dips
+    // below zero whenever the sprint over-delivers.
+    if (!isDateAfter(burndownDate, completionCutoff)) {
+      const plotDate = isDateBefore(burndownDate, startDate)
+        ? startDate
+        : isDateAfter(burndownDate, endDate)
+          ? endDate
+          : burndownDate;
+      const plotDateStr = toDateString(plotDate);
+      dailyCompletionMap.set(plotDateStr, (dailyCompletionMap.get(plotDateStr) ?? 0) + sp);
       totalConsumedPoints += sp;
     }
   }
@@ -255,7 +368,6 @@ export function computeBurndown(
 
   // Detect tasks in the selected sprint that also appear in other sprints
   // (i.e. carried over / added to another sprint).
-  const currentSprint = firstRow.sprint?.trim();
   const taskSprintMap = buildTaskSprintMap(allRows);
   const seenTasks = new Set<string>();
   for (const row of sprintRows) {

@@ -5,7 +5,7 @@ import {
   SprintSummaryResponse,
   TaskRef,
 } from '@/types/sprint-summary';
-import { getUniqueSprints } from './burndown-engine';
+import { resolveNextSprintName } from './burndown-engine';
 
 /**
  * Sprint Summary engine.
@@ -126,77 +126,6 @@ function taskRef(row: SprintRow): TaskRef {
   const url = row.linkToTask.trim();
   const title = row.tasksTitle.trim() || url || '(untitled task)';
   return { title, url };
-}
-
-/**
- * Sprint naming convention: "Sprint #YYYY.QX.SY (MMDD-MMDD)". Parsed into an
- * orderable tuple so the next sprint is "the next S within the quarter, rolling
- * over to S1 of the next quarter" — independent of how many sprints a quarter has.
- */
-const SPRINT_NAME_RE = /Sprint\s*#(\d{4})\.Q(\d)\.S(\d+)/i;
-interface SprintOrder {
-  year: number;
-  quarter: number;
-  sprint: number;
-}
-function parseSprintOrder(name: string): SprintOrder | null {
-  const m = name.match(SPRINT_NAME_RE);
-  if (!m) return null;
-  return { year: +m[1], quarter: +m[2], sprint: +m[3] };
-}
-function compareOrder(a: SprintOrder, b: SprintOrder): number {
-  if (a.year !== b.year) return a.year - b.year;
-  if (a.quarter !== b.quarter) return a.quarter - b.quarter;
-  return a.sprint - b.sprint;
-}
-
-/**
- * Resolve the next sprint name.
- *
- * Primary: by the naming convention — the smallest (year, quarter, sprint) tuple
- * strictly greater than the selected sprint's, among the sprints present in the
- * data. This handles S6 → S7 → (next quarter) S1 without depending on dates or
- * knowing how many sprints a quarter has.
- *
- * Fallback (selected name doesn't parse, or no convention-named sprint follows):
- * by start date via getUniqueSprints.
- */
-function resolveNextSprintName(
-  allRows: SprintRow[],
-  selectedSprint: string,
-): string | null {
-  const names = new Set<string>();
-  for (const r of allRows) {
-    const n = r.sprint.trim();
-    if (n) names.add(n);
-  }
-
-  const selOrder = parseSprintOrder(selectedSprint);
-  if (selOrder) {
-    let bestName: string | null = null;
-    let bestOrder: SprintOrder | null = null;
-    for (const name of names) {
-      if (name === selectedSprint) continue;
-      const o = parseSprintOrder(name);
-      if (!o || compareOrder(o, selOrder) <= 0) continue; // not strictly after
-      if (bestOrder === null || compareOrder(o, bestOrder) < 0) {
-        bestOrder = o;
-        bestName = name;
-      }
-    }
-    if (bestName) return bestName;
-  }
-
-  // Date-based fallback.
-  const sprints = getUniqueSprints(allRows); // newest-first, YYYY-MM-DD dates
-  const selected = sprints.find((s) => s.id === selectedSprint);
-  if (!selected) return null;
-  let next: { id: string; startDate: string } | null = null;
-  for (const s of sprints) {
-    if (s.startDate <= selected.startDate) continue;
-    if (next === null || s.startDate < next.startDate) next = s;
-  }
-  return next ? next.id : null;
 }
 
 export function computeSprintSummary(
