@@ -9,7 +9,6 @@ import {
 } from '@/lib/asana';
 import {
   fetchSheetRowsForSync,
-  batchUpdateSheetRows,
   batchUpdateColumnX,
   insertSheetRows,
   appendSheetRows,
@@ -61,38 +60,11 @@ function prepareTaskRow(
 }
 
 /**
- * Find the first row number (1-based) where a sprint section starts.
- * Ports GAS findSectionStartRow() (lines 272-278).
- */
-function findSectionStartRow(rows: string[][], projectTitle: string): number {
-  for (let i = 1; i < rows.length; i++) {
-    if (rows[i][0] === projectTitle) return i + 1; // 1-based row number
-  }
-  return rows.length + 1; // append at end
-}
-
-/**
- * Find the last row number (1-based) of a sprint section.
- * Ports GAS findSectionEndRow() (lines 280-286).
- */
-function findSectionEndRow(
-  rows: string[][],
-  sectionStartRow: number,
-  projectTitle: string,
-): number | null {
-  // sectionStartRow is 1-based; convert to 0-based index
-  const startIdx = sectionStartRow - 1;
-  for (let i = startIdx; i < rows.length; i++) {
-    if (i >= rows.length - 1 || rows[i][0] !== projectTitle) {
-      return i + 1; // 1-based
-    }
-  }
-  return rows.length; // 1-based last row
-}
-
-/**
- * Main sync orchestrator. Ports the full GAS flow:
- * updateSpecificSprint() + updateTasksForProject() + deleteRemovedTasks()
+ * Main sync orchestrator. Replace-per-sprint strategy: snapshot the sprint's
+ * existing rows, wipe the whole section, and re-add it fresh from Asana. This
+ * avoids the fragile per-task matching (by task-URL + sprint name) that drifted
+ * — and silently duplicated rows — whenever a sprint was renamed or a task link
+ * changed.
  */
 export async function syncSprintData(
   sprintName: string,
@@ -163,106 +135,103 @@ export async function syncSprintData(
     log('Reading current sheet data...');
     const sheetRows = await fetchSheetRowsForSync();
 
-    // 5. Build URL|SprintName lookup map (ports GAS lines 90-97)
+    // 5. Snapshot the sprint's existing rows before we touch anything: where the
+    //    section lives, each task's already-resolved "Date Added to Sprint"
+    //    (col X) keyed by task URL, and which task URLs were present before. We
+    //    then wipe the whole section and re-add it from Asana so the sheet always
+    //    mirrors Asana exactly — no fragile per-task matching that drifts when a
+    //    sprint is renamed or a task link changes.
     log('Processing tasks...');
-    const urlProjectMap: Record<string, number> = {};
+    const COL_X = 23; // 0-based index of column X
+    const existingRowNumbers: number[] = [];
+    const preservedX: Record<string, string> = {}; // task URL -> existing col X
+    const oldUrls = new Set<string>();
+    let firstRow = 0; // 1-based position of the sprint's first row
+
     for (let i = 1; i < sheetRows.length; i++) {
       const row = sheetRows[i];
-      if (row[4] && row[0]) {
-        // Link to Task (col E) and Sprint (col A)
-        const key = `${row[4]}|${row[0]}`;
-        urlProjectMap[key] = i + 1; // 1-based row number
+      if (row[0] !== projectInfo.title) continue; // col A = Sprint
+      if (firstRow === 0) firstRow = i + 1;
+      existingRowNumbers.push(i + 1); // 1-based row number
+      const url = row[4]; // col E = Link to Task
+      if (url) {
+        oldUrls.add(url);
+        const x = (row[COL_X] ?? '').trim();
+        if (x) preservedX[url] = x;
       }
     }
 
-    // 6. Categorize tasks: update vs insert
-    const rowsToUpdate: Array<{ rowNumber: number; values: string[] }> = [];
-    const newRows: string[][] = [];
-    const updatedRowNumbers = new Set<number>();
-
-    for (const task of tasks) {
-      const rowValues = prepareTaskRow(
+    // 6. Build a fresh row for every current Asana task, in Asana's order.
+    const newRows = tasks.map((task) =>
+      prepareTaskRow(
         task,
         projectInfo.title,
         projectInfo.startDate,
         projectInfo.endDate,
-      );
-      const key = `${task.permalink_url}|${projectInfo.title}`;
-      const existingRowNumber = urlProjectMap[key];
+      ),
+    );
 
-      if (existingRowNumber) {
-        rowsToUpdate.push({ rowNumber: existingRowNumber, values: rowValues });
-        updatedRowNumbers.add(existingRowNumber);
-      } else {
-        newRows.push(rowValues);
-      }
+    // Report the real net change for the summary, even though we physically
+    // replace every row: a task already on the sheet counts as "updated", one
+    // new to the sheet as "inserted", and a sheet task no longer in Asana as
+    // "deleted".
+    const newUrls = new Set(tasks.map((t) => t.permalink_url));
+    result.tasksUpdated = [...newUrls].filter((u) => oldUrls.has(u)).length;
+    result.tasksInserted = [...newUrls].filter((u) => !oldUrls.has(u)).length;
+    result.tasksDeleted = [...oldUrls].filter((u) => !newUrls.has(u)).length;
+
+    // 7. Wipe the sprint's existing rows. The helper deletes bottom-to-top so the
+    //    row numbers stay valid as it goes.
+    if (existingRowNumbers.length > 0) {
+      log(`Clearing ${existingRowNumbers.length} existing row(s)...`);
+      await deleteSheetRows(existingRowNumbers);
     }
 
-    // 7. Batch update existing rows
-    if (rowsToUpdate.length > 0) {
-      log(`Updating ${rowsToUpdate.length} existing tasks...`);
-      await batchUpdateSheetRows(rowsToUpdate);
-      result.tasksUpdated = rowsToUpdate.length;
-    }
-
-    // 8. Insert new rows
+    // 8. Re-add every current task. Insert back at the section's old position so
+    //    sprint ordering on the sheet is preserved; append if the sprint is new.
+    //    Columns M–W are ARRAYFORMULA-driven and refill themselves; only column X
+    //    needs restoring (step 9).
     if (newRows.length > 0) {
-      log(`Inserting ${newRows.length} new tasks...`);
-      const sectionStart = findSectionStartRow(sheetRows, projectInfo.title);
-      const sectionEnd = findSectionEndRow(
-        sheetRows,
-        sectionStart,
-        projectInfo.title,
-      );
-
-      if (sectionEnd && sectionStart <= sheetRows.length && sectionEnd < sheetRows.length) {
-        await insertSheetRows(sectionEnd, newRows);
+      log(`Writing ${newRows.length} task(s)...`);
+      if (firstRow > 0) {
+        // firstRow is the min matching row, so rows above it never shifted during
+        // the delete — inserting after (firstRow - 1) drops the block back in place.
+        await insertSheetRows(firstRow - 1, newRows);
       } else {
         await appendSheetRows(newRows);
       }
-      result.tasksInserted = newRows.length;
     }
 
-    // 9. Delete tasks removed from Asana (ports GAS lines 257-270)
-    const taskUrls = new Set(tasks.map((t) => t.permalink_url));
-    const rowsToDelete: number[] = [];
-
-    for (let i = sheetRows.length - 1; i >= 1; i--) {
-      const row = sheetRows[i];
-      const actualRowNumber = i + 1;
-
-      if (
-        row[0] === projectInfo.title &&
-        !taskUrls.has(row[4]) &&
-        !updatedRowNumbers.has(actualRowNumber)
-      ) {
-        rowsToDelete.push(actualRowNumber);
-      }
-    }
-
-    if (rowsToDelete.length > 0) {
-      log(`Removing ${rowsToDelete.length} deleted tasks...`);
-      await deleteSheetRows(rowsToDelete);
-      result.tasksDeleted = rowsToDelete.length;
-    }
-
-    // 10. Backfill "Date Added to Sprint" (column X) from Asana's activity log.
-    //     Only rows with a blank X are looked up, so the first sync after adding
-    //     the column does a one-time backfill and later syncs only touch new
-    //     tasks. Best-effort: failures here never fail the overall sync, and
-    //     writes are flushed in chunks so an interrupted run resumes next time.
+    // 9. Restore/backfill "Date Added to Sprint" (column X). Because we wiped the
+    //    section, first write back the values we snapshotted (preservedX) for
+    //    tasks that were already on the sheet — instant, no API calls — then look
+    //    up only the genuinely new tasks from Asana's activity log. Best-effort:
+    //    failures here never fail the overall sync, and writes are flushed in
+    //    chunks so an interrupted run resumes next time.
     try {
       const freshRows = await fetchSheetRowsForSync(); // A:X
       const urlToGid = new Map(tasks.map((t) => [t.permalink_url, t.gid]));
-      const COL_X = 23; // 0-based index of column X
 
+      const restores: Array<{ rowNumber: number; value: string }> = [];
       const lookups: Array<{ rowNumber: number; gid: string }> = [];
       for (let i = 1; i < freshRows.length; i++) {
         const row = freshRows[i];
         if (row[0] !== projectInfo.title) continue; // only this sprint
         if ((row[COL_X] ?? '').trim()) continue; // already filled
-        const gid = urlToGid.get(row[4]); // col E = Link to Task
-        if (gid) lookups.push({ rowNumber: i + 1, gid });
+        const url = row[4]; // col E = Link to Task
+        const preserved = preservedX[url];
+        if (preserved) {
+          restores.push({ rowNumber: i + 1, value: preserved });
+        } else {
+          const gid = urlToGid.get(url);
+          if (gid) lookups.push({ rowNumber: i + 1, gid });
+        }
+      }
+
+      if (restores.length > 0) {
+        log(`Restoring "Date Added to Sprint" for ${restores.length} task(s)...`);
+        await batchUpdateColumnX(restores);
+        result.datesFilled += restores.length;
       }
 
       if (lookups.length > 0) {
@@ -273,6 +242,7 @@ export async function syncSprintData(
         const TIME_BUDGET_MS = 48_000;
         const CONCURRENCY = 5; // parallel activity-log lookups; stays under Asana's rate limit
         let done = 0;
+        let filled = 0; // X values written from activity-log lookups this phase
         let noEvent = 0; // call succeeded but the task has no matching add-event
         let errors = 0; // the lookup call failed (auth/scope/rate-limit)
         let lastError = '';
@@ -300,6 +270,7 @@ export async function syncSprintData(
           if (writes.length > 0) {
             await batchUpdateColumnX(writes);
             result.datesFilled += writes.length;
+            filled += writes.length;
           }
           done += batch.length;
           if (++batchIdx % 5 === 0) log(`  ...resolved ${done}/${lookups.length}`);
@@ -308,7 +279,7 @@ export async function syncSprintData(
 
         // Report a breakdown so a 0-fill run reveals *why* (no events vs. failures).
         const left = lookups.length - done;
-        const parts = [`Filled ${result.datesFilled}`];
+        const parts = [`Filled ${filled}`];
         if (noEvent > 0) parts.push(`${noEvent} had no add-event`);
         if (errors > 0) {
           parts.push(`${errors} lookup error(s)${lastError ? ` (last: ${lastError})` : ''}`);
@@ -321,7 +292,7 @@ export async function syncSprintData(
       log(`Warning: could not backfill "Date Added to Sprint": ${String(err)}`);
     }
 
-    // 11. Invalidate cache
+    // 10. Invalidate cache
     log('Invalidating dashboard cache...');
     invalidateSheetCache();
 
