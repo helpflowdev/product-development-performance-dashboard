@@ -40,11 +40,19 @@ function parseMonthToNum(raw: string | undefined | null): number | null {
 }
 
 /**
- * Check if a row should be counted toward completion rate.
- * A row is counted if it has completionRateCounter === "1"
+ * Check if a row should be counted as completed toward the completion rate.
+ *
+ * Reads the Status column (written directly by the sync) — NOT the sheet's
+ * "Completion Rate Counter" formula column. The replace-per-sprint sync re-inserts
+ * a sprint's rows and writes only columns A–L, leaving the formula-driven columns
+ * M–W (which include Completion Rate Counter) blank for every re-synced sprint.
+ * Reading that column therefore counted 0 completions and forced the rate to 0.00%.
+ * Status is the team's source of truth for completion and matches both the burndown
+ * engine (`row.status === 'Complete'`) and the legacy sprint-summary script, so all
+ * three views now agree task-for-task.
  */
 function isCompleted(row: SprintRow): boolean {
-  return row.completionRateCounter === '1';
+  return row.status === 'Complete';
 }
 
 /**
