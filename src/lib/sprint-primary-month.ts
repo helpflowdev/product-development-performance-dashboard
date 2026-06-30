@@ -11,7 +11,7 @@ import { parseDate } from './date-utils';
  * uncommon but possible; defaulting to the later month is consistent with how
  * teams typically refer to a cross-boundary sprint.
  */
-function getSprintPrimaryYearMonth(
+export function getSprintPrimaryYearMonth(
   sprintDateStart: string,
   sprintDateEnd: string
 ): { year: string; month: number } | null {

@@ -6,6 +6,8 @@ import {
   AssigneeSprintStat,
 } from '@/types/individual-cr';
 import { getUniqueSprints } from './burndown-engine';
+import { getSprintPrimaryYearMonth } from './sprint-primary-month';
+import { resolveRosterMember } from './sprint-planning-roster';
 
 const MONTH_NUM_TO_FULL = [
   '', 'January', 'February', 'March', 'April', 'May', 'June',
@@ -53,6 +55,58 @@ function parseMonthToNum(raw: string | undefined | null): number | null {
  */
 function isCompleted(row: SprintRow): boolean {
   return row.status === 'Complete';
+}
+
+/**
+ * Fill the formula-driven columns the sync leaves blank for re-synced sprints.
+ *
+ * The replace-per-sprint sync writes only columns A–L, so the sheet's
+ * formula columns M–W (here: Month, Year, Role) come back blank for every
+ * re-synced sprint. The Individual CR page filters and groups on those exact
+ * fields, so without this backfill a synced sprint silently disappears when the
+ * user filters by year/month/role and drops out of the Month→Sprint breakdown.
+ *
+ * Only BLANK cells are filled, so rows that still carry the sheet's values are
+ * untouched:
+ *   - Month/Year ← the sprint's primary (majority-days) month/year, derived from
+ *     its dates (columns B/C, which the sync DOES write). This matches how the
+ *     rest of the completion-rate page already buckets sprints by month.
+ *   - Role ← the planning roster's role for the assignee (best-effort; names not
+ *     in the roster stay blank).
+ */
+export function backfillDerivedColumns(rows: SprintRow[]): SprintRow[] {
+  // Cache per-sprint primary month/year so we parse each sprint's dates once.
+  const primaryBySprint = new Map<string, { year: string; month: number } | null>();
+
+  return rows.map((row) => {
+    const hasMonth = !!row.month?.trim();
+    const hasYear = !!row.year?.trim();
+    const hasRole = !!row.role?.trim();
+    if (hasMonth && hasYear && hasRole) return row;
+
+    let month = row.month;
+    let year = row.year;
+    if (!hasMonth || !hasYear) {
+      if (!primaryBySprint.has(row.sprint)) {
+        primaryBySprint.set(
+          row.sprint,
+          getSprintPrimaryYearMonth(row.sprintDateStart, row.sprintDateEnd),
+        );
+      }
+      const primary = primaryBySprint.get(row.sprint);
+      if (primary) {
+        if (!hasMonth) month = String(primary.month);
+        if (!hasYear) year = primary.year;
+      }
+    }
+
+    let role = row.role;
+    if (!hasRole) {
+      role = resolveRosterMember(row.assigneeName)?.role ?? row.role;
+    }
+
+    return { ...row, month, year, role };
+  });
 }
 
 /**

@@ -10,6 +10,7 @@ import {
   getUniqueRoles,
   getUniqueAssignees,
   computeIndividualStats,
+  backfillDerivedColumns,
 } from '@/lib/completion-rate-engine';
 import { filterToDevMembers } from '@/lib/dev-members';
 import { IndividualCRRequest, IndividualCRResponse } from '@/types/individual-cr';
@@ -31,9 +32,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       (body.years?.length ?? 0) > 0 ||
       (body.months?.length ?? 0) > 0;
 
-    // Fetch and parse sheet data
+    // Fetch and parse sheet data. Backfill the formula columns (Month/Year/Role)
+    // that the replace-per-sprint sync leaves blank for re-synced sprints, so the
+    // year/month/role filters and the Month→Sprint breakdown below don't silently
+    // drop those sprints.
     const rawRows = await fetchSheetRows();
-    const sprintRows = mapRowsToSprintRows(rawRows);
+    const sprintRows = backfillDerivedColumns(mapRowsToSprintRows(rawRows));
 
     if (sprintRows.length === 0) {
       return NextResponse.json({ error: 'No data found in sheet' }, { status: 404 });
