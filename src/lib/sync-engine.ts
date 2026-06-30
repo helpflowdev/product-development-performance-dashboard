@@ -20,6 +20,20 @@ import { AsanaTask, SyncResult } from '@/types/sync';
 type LogFn = (message: string) => void;
 
 /**
+ * Sheet layout contract:
+ *   - Row 1 = column headers.
+ *   - Row 2 = the ARRAYFORMULA cells that compute columns M–W (Completion Rate
+ *     Counter, Week, Month, Year, Role, …) for every data row below. They
+ *     reference open ranges (e.g. L3:L) and spill downward.
+ *   - Row 3 onward = task data.
+ *
+ * The sync must NEVER delete, insert over, or write to rows 1–2: deleting row 2
+ * destroys the formulas, blanking M–W for the WHOLE sheet. So every read/write
+ * below is fenced to FIRST_DATA_ROW, and all task data is added at row 3+.
+ */
+const FIRST_DATA_ROW = 3;
+
+/**
  * Prepare a task row for writing to columns A-L.
  * Ports GAS prepareTaskRow() (lines 160-179).
  *
@@ -149,10 +163,12 @@ export async function syncSprintData(
     let firstRow = 0; // 1-based position of the sprint's first row
 
     for (let i = 1; i < sheetRows.length; i++) {
+      const rowNumber = i + 1; // 1-based
+      if (rowNumber < FIRST_DATA_ROW) continue; // never touch header/formula rows
       const row = sheetRows[i];
       if (row[0] !== projectInfo.title) continue; // col A = Sprint
-      if (firstRow === 0) firstRow = i + 1;
-      existingRowNumbers.push(i + 1); // 1-based row number
+      if (firstRow === 0) firstRow = rowNumber;
+      existingRowNumbers.push(rowNumber); // 1-based row number
       const url = row[4]; // col E = Link to Task
       if (url) {
         oldUrls.add(url);
@@ -187,17 +203,24 @@ export async function syncSprintData(
       await deleteSheetRows(existingRowNumbers);
     }
 
-    // 8. Re-add every current task. Insert back at the section's old position so
-    //    sprint ordering on the sheet is preserved; append if the sprint is new.
-    //    Columns M–W are ARRAYFORMULA-driven and refill themselves; only column X
-    //    needs restoring (step 9).
+    // 8. Re-add every current task at row 3+. Insert back at the section's old
+    //    position so sprint ordering on the sheet is preserved; append at the
+    //    bottom if the sprint is new. The row-2 ARRAYFORMULA cells spill into the
+    //    inserted rows and refill columns M–W on their own; only column X needs
+    //    restoring (step 9).
     if (newRows.length > 0) {
       log(`Writing ${newRows.length} task(s)...`);
       if (firstRow > 0) {
         // firstRow is the min matching row, so rows above it never shifted during
-        // the delete — inserting after (firstRow - 1) drops the block back in place.
-        await insertSheetRows(firstRow - 1, newRows);
+        // the delete — inserting after (firstRow - 1) drops the block back in
+        // place. Clamp to FIRST_DATA_ROW - 1 so we can never insert above row 3
+        // and disturb the header/formula rows.
+        const afterRow = Math.max(firstRow - 1, FIRST_DATA_ROW - 1);
+        await insertSheetRows(afterRow, newRows);
       } else {
+        // New sprint: append at the bottom. values.append keys off columns A–L,
+        // which are blank in the formula row, so it targets the last real data
+        // row (always ≥ row 3) and never the formula row.
         await appendSheetRows(newRows);
       }
     }
@@ -215,16 +238,18 @@ export async function syncSprintData(
       const restores: Array<{ rowNumber: number; value: string }> = [];
       const lookups: Array<{ rowNumber: number; gid: string }> = [];
       for (let i = 1; i < freshRows.length; i++) {
+        const rowNumber = i + 1;
+        if (rowNumber < FIRST_DATA_ROW) continue; // skip header/formula rows
         const row = freshRows[i];
         if (row[0] !== projectInfo.title) continue; // only this sprint
         if ((row[COL_X] ?? '').trim()) continue; // already filled
         const url = row[4]; // col E = Link to Task
         const preserved = preservedX[url];
         if (preserved) {
-          restores.push({ rowNumber: i + 1, value: preserved });
+          restores.push({ rowNumber, value: preserved });
         } else {
           const gid = urlToGid.get(url);
-          if (gid) lookups.push({ rowNumber: i + 1, gid });
+          if (gid) lookups.push({ rowNumber, gid });
         }
       }
 
