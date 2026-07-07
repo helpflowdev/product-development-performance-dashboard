@@ -3,7 +3,7 @@ import { fetchSheetRows } from '@/lib/sheets';
 import { mapRowsToSprintRows } from '@/lib/row-mapper';
 import { backfillDerivedColumns } from '@/lib/completion-rate-engine';
 import { computeScorecard } from '@/lib/scorecard-engine';
-import { attachRunningCompletion } from '@/lib/scorecard-running';
+import { attachAsanaContext } from '@/lib/scorecard-running';
 import { sendScorecardToAsana } from '@/lib/scorecard-asana';
 
 export const runtime = 'nodejs';
@@ -50,8 +50,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       uptimeNote: body.uptimeNote,
       completionGoal: body.completionGoal,
     });
-    // Recompute the running / to-date completion server-side (live Asana due dates).
-    await attachRunningCompletion(scorecard, sprintRows);
+    // Recompute the sprint link + running/to-date completion server-side (live Asana).
+    await attachAsanaContext(scorecard, sprintRows);
 
     // Narrative is reviewed/edited prose — use what the operator saw.
     const narrative = body.narrative?.trim();

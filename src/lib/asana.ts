@@ -662,31 +662,47 @@ export async function fetchProjectTasks(
 }
 
 /**
- * Fetch each task's Asana due date ("due_on") for a sprint, keyed by the task's
- * permalink URL (which matches the sheet's "Link to Task" column). Used by the
- * Weekly Scorecard's running/to-date completion rate — due dates aren't synced
- * into the sheet, so we read them live from Asana for the selected sprint only.
+ * Resolve a sprint's Asana data in one project lookup: the project's permalink
+ * (for linking the sprint name in the reports) and each task's due date
+ * ("due_on") keyed by permalink URL (which matches the sheet's "Link to Task"),
+ * for the Weekly Scorecard's running/to-date completion rate. Due dates aren't
+ * synced into the sheet, so we read them live for the selected sprint only.
  *
- * Resolves the sprint's Asana project by exact name — the workspace typeahead
- * first (one cheap call), falling back to the team-scoped project list. Returns
- * an empty map if the project can't be found or has no tasks; the value is '' for
- * a task with no due date set. Never throws for a missing project — callers treat
- * an empty map as "no due dates available".
+ * Resolves the project by exact name — workspace typeahead first (one cheap
+ * call), falling back to the team-scoped list. When the project can't be found:
+ * projectUrl is null and dueByLink is empty; callers treat that as "no Asana data
+ * available". The map value is '' for a task with no due date set.
  */
-export async function fetchSprintTaskDueDates(
+export async function fetchSprintAsanaData(
   sprintName: string,
   log?: LogFn,
-): Promise<Map<string, string>> {
+): Promise<{ projectUrl: string | null; dueByLink: Map<string, string> }> {
   const project =
     (await findProjectInWorkspace(sprintName, log)) ??
     (await findAsanaProject(sprintName, log));
 
   const dueByLink = new Map<string, string>();
-  if (!project) return dueByLink;
+  if (!project) return { projectUrl: null, dueByLink };
+
+  // Project permalink — prefer Asana's canonical permalink_url; fall back to a
+  // constructed URL if the fetch is unavailable (the link is best-effort).
+  let projectUrl = `https://app.asana.com/0/${project.gid}`;
+  try {
+    const res = await fetch(
+      `${ASANA_BASE_URL}/projects/${project.gid}?opt_fields=permalink_url`,
+      { method: 'GET', headers: getHeaders() },
+    );
+    if (res.ok) {
+      const j = await res.json();
+      projectUrl = (j.data?.permalink_url as string | undefined) ?? projectUrl;
+    }
+  } catch {
+    // keep the constructed fallback
+  }
 
   const tasks = await fetchProjectTasks(project.gid, log);
   for (const t of tasks) {
     if (t.permalink_url) dueByLink.set(t.permalink_url, t.due_on ?? '');
   }
-  return dueByLink;
+  return { projectUrl, dueByLink };
 }

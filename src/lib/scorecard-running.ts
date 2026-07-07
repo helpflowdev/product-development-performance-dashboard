@@ -1,28 +1,32 @@
 import { ScorecardResponse } from '@/types/scorecard';
 import { SprintRow } from '@/types/sprint';
-import { fetchSprintTaskDueDates } from './asana';
+import { fetchSprintAsanaData } from './asana';
 import { filterBySprints } from './completion-rate-engine';
 import { computeRunningCompletion } from './scorecard-engine';
 
 /**
- * Fetch the selected sprint's Asana due dates and attach the running / to-date
- * completion to `scorecard` (mutates it) — mirroring how the routes attach the
- * Gemini narrative. Due dates aren't in the sheet, so this is the one async,
- * Asana-dependent step; it's kept out of the pure engine and shared by both the
- * compute and send-to-asana routes.
+ * Fetch the selected sprint's live Asana data and attach it to `scorecard`
+ * (mutates it) — mirroring how the routes attach the Gemini narrative. This is
+ * the one async, Asana-dependent step, kept out of the pure engine and shared by
+ * both the compute and send-to-asana routes. It sets:
+ *   - sprintUrl: the Asana project permalink (searched by sprint name), so the
+ *     reports can link the sprint name.
+ *   - the running / to-date completion (due-based) from each task's due date,
+ *     which isn't in the sheet.
  *
- * Never throws: on an Asana failure it records runningCompletionError and leaves
- * runningCompletionRate null, so the rest of the scorecard still renders/sends.
+ * Never throws: on an Asana failure it records runningCompletionError, leaves
+ * runningCompletionRate null and sprintUrl null, so the rest still renders/sends.
  */
-export async function attachRunningCompletion(
+export async function attachAsanaContext(
   scorecard: ScorecardResponse,
   allRows: SprintRow[],
 ): Promise<void> {
   try {
-    const dueByLink = await fetchSprintTaskDueDates(scorecard.sprintId);
+    const { projectUrl, dueByLink } = await fetchSprintAsanaData(scorecard.sprintId);
+    scorecard.sprintUrl = projectUrl;
+
     const sprintRows = filterBySprints(allRows, [scorecard.sprintId]);
     const running = computeRunningCompletion(sprintRows, dueByLink);
-
     scorecard.runningCompletionRate = running.runningCompletionRate;
     scorecard.tasksDue = running.tasksDue;
     scorecard.tasksDueCompleted = running.tasksDueCompleted;

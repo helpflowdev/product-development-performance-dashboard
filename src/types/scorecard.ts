@@ -17,6 +17,8 @@ import { AssigneeSummary, AssigneeTaskGroup } from './sprint-summary';
 
 export interface ScorecardResponse {
   sprintId: string; // the sprint the scorecard reports on (default: latest completed)
+  sprintUrl: string | null; // Asana project permalink for the sprint (searched live); null if not found
+  week: string; // the sprint's Week label, e.g. "WE192026" (most common in its rows; '' if none)
   dateRange: string; // "MM/DD/YYYY – MM/DD/YYYY" from the sprint dates
 
   completionRate: number; // this-sprint, computeSummary (final: completed ÷ all plotted)

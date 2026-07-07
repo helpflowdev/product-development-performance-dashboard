@@ -69,10 +69,17 @@ export function buildScorecardCommentText(
   const lines: string[] = [
     `Sprint Scorecard Report - ${dateMMDDYYYY}`,
     `Sprint: ${sc.sprintId}`,
+  ];
+
+  // Sprint project link (Asana auto-links the raw URL in plain-text comments).
+  if (sc.sprintUrl) lines.push(`Sprint Link: ${sc.sprintUrl}`);
+  if (sc.week) lines.push(`Week: ${sc.week}`);
+
+  lines.push(
     `Date Range: ${sc.dateRange}`,
     'Completion Rate:',
     `    This Sprint: ${sc.completionRate.toFixed(2)}% (Goal: ${sc.completionGoal}%)`,
-  ];
+  );
 
   if (sc.runningCompletionRate !== null) {
     lines.push(

@@ -31,6 +31,28 @@ import { isDevMember } from './dev-members';
 /** Default completion-rate target shown beside the this-sprint rate. */
 const DEFAULT_COMPLETION_GOAL = 95;
 
+/**
+ * The sprint's Week label (e.g. "WE192026") — the most common non-blank value in
+ * the sprint's rows, matching how computeSprintStats picks a sprint's week.
+ * Returns '' when no row carries a week.
+ */
+function resolveWeekLabel(rows: SprintRow[]): string {
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    const w = row.week?.trim();
+    if (w) counts.set(w, (counts.get(w) ?? 0) + 1);
+  }
+  let best = '';
+  let max = 0;
+  for (const [w, c] of counts) {
+    if (c > max) {
+      max = c;
+      best = w;
+    }
+  }
+  return best;
+}
+
 /** Today's date as YYYY-MM-DD in the configured timezone. */
 function todayDateString(): string {
   const tz = process.env.TIMEZONE ?? 'America/Los_Angeles';
@@ -156,6 +178,9 @@ export function computeScorecard(
 
   return {
     sprintId,
+    // Asana project link is resolved live and attached by the route (needs I/O).
+    sprintUrl: null,
+    week: resolveWeekLabel(sprintRows),
     dateRange,
     completionRate: teamSummary.completionRate,
     completionGoal: input.completionGoal ?? DEFAULT_COMPLETION_GOAL,

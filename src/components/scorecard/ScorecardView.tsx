@@ -136,11 +136,27 @@ export function ScorecardView({ scorecard: sc }: ScorecardViewProps) {
 
   return (
     <div className="space-y-4">
-      {/* Sprint + date range */}
+      {/* Sprint (linked) + week + date range */}
       <Card>
         <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h3 className="font-semibold text-white">{sc.sprintId}</h3>
-          <span className="text-sm text-slate-400">{sc.dateRange}</span>
+          <h3 className="font-semibold text-white">
+            {sc.sprintUrl ? (
+              <a
+                href={sc.sprintUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-cyan-300 hover:text-cyan-200 hover:underline"
+              >
+                {sc.sprintId}
+              </a>
+            ) : (
+              sc.sprintId
+            )}
+          </h3>
+          <span className="text-sm text-slate-400">
+            {sc.week && <span className="mr-3 text-slate-300">{sc.week}</span>}
+            {sc.dateRange}
+          </span>
         </div>
       </Card>
 

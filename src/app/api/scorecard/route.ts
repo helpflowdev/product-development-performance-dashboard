@@ -3,7 +3,7 @@ import { fetchSheetRows } from '@/lib/sheets';
 import { mapRowsToSprintRows } from '@/lib/row-mapper';
 import { backfillDerivedColumns } from '@/lib/completion-rate-engine';
 import { computeScorecard } from '@/lib/scorecard-engine';
-import { attachRunningCompletion } from '@/lib/scorecard-running';
+import { attachAsanaContext } from '@/lib/scorecard-running';
 import { generateScorecardNarrative } from '@/lib/sprint-focus-summary';
 import { ScorecardInput } from '@/types/scorecard';
 
@@ -47,8 +47,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       completionGoal: body.completionGoal,
     });
 
-    // Running / to-date completion from live Asana due dates (never throws).
-    await attachRunningCompletion(scorecard, sprintRows);
+    // Sprint link + running/to-date completion from live Asana (never throws).
+    await attachAsanaContext(scorecard, sprintRows);
 
     // Analytical narrative from the computed numbers. Never throws — surfaces a
     // reason in narrativeError when generation fails so it isn't silent.
