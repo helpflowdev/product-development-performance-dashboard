@@ -81,5 +81,6 @@ export interface ScorecardSendResult {
   taskGid?: string;
   taskUrl?: string;
   commentsPosted?: number;
+  reused?: boolean; // true when an existing dated subtask was reused (not created)
   error?: string;
 }

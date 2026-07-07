@@ -168,10 +168,17 @@ export default function ScorecardPage() {
           <Card className="mb-6 border border-emerald-500/50 bg-emerald-500/10">
             <h3 className="font-semibold text-emerald-400 mb-1">Sent to Asana</h3>
             <p className="text-sm text-slate-300">
-              Created the Weekly Scorecard subtask for{' '}
+              {sendResult.reused ? 'Updated the existing' : 'Created the'} Weekly
+              Scorecard subtask (dated today) for{' '}
               <span className="text-slate-100">{scorecard.sprintId}</span>
               {typeof sendResult.commentsPosted === 'number' && (
                 <> with {sendResult.commentsPosted} comment(s).</>
+              )}
+              {sendResult.reused && (
+                <span className="text-slate-400">
+                  {' '}
+                  Re-running today reuses this same subtask; the new comment is added to it.
+                </span>
               )}
             </p>
             {sendResult.taskUrl && (

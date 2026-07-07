@@ -399,6 +399,49 @@ export async function createAsanaSubtask(
 }
 
 /**
+ * Find an existing subtask of `parentGid` whose name matches `name` exactly
+ * (trimmed), returning its gid + permalink, or null if none matches. Used for the
+ * scorecard's find-or-create: reuse the dated subtask on re-runs instead of
+ * duplicating it. Paginates the parent's subtasks (cheap — parents hold few).
+ * Throws on an API error so the caller fails safe (never blindly creates a dup).
+ */
+export async function findSubtaskByName(
+  parentGid: string,
+  name: string,
+): Promise<{ gid: string; permalinkUrl: string } | null> {
+  const target = name.trim();
+  let nextUrl: string | null = `${ASANA_BASE_URL}/tasks/${parentGid}/subtasks?opt_fields=name,permalink_url&limit=100`;
+  let pages = 0;
+
+  while (nextUrl && pages < 10) {
+    const response: Response = await fetch(nextUrl, { method: 'GET', headers: getHeaders() });
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`Failed to fetch subtasks: ${response.status} ${text}`);
+    }
+
+    const data: {
+      data: Array<{ gid: string; name?: string; permalink_url?: string }>;
+      next_page: { uri: string } | null;
+    } = await response.json();
+
+    const match = data.data.find((t) => (t.name ?? '').trim() === target);
+    if (match) {
+      return {
+        gid: match.gid,
+        permalinkUrl: match.permalink_url ?? `https://app.asana.com/0/0/${match.gid}`,
+      };
+    }
+
+    nextUrl = data.next_page ? data.next_page.uri : null;
+    pages++;
+    if (nextUrl) await sleep(RATE_LIMIT_DELAY_MS);
+  }
+
+  return null;
+}
+
+/**
  * Post a single comment (story) to a task. Never throws — returns a result
  * carrying Asana's error text on failure (so callers can detect "too large").
  * Options: `asHtml` sends Asana rich text (`html_text`, wrapped in <body>…</body>)

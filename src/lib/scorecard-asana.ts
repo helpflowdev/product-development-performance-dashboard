@@ -3,6 +3,7 @@ import { formatHours } from './format';
 import { REPORT_CC_GIDS, REPORT_CC_NAMES } from './report-recipients';
 import {
   createAsanaSubtask,
+  findSubtaskByName,
   postCommentToTask,
   postGroupedTaskListInChunks,
 } from './asana';
@@ -149,11 +150,20 @@ export async function sendScorecardToAsana(
 
   let commentsPosted = 0;
   try {
-    const { gid, permalinkUrl } = await createAsanaSubtask(parentGid, taskTitle, {
-      assignee,
-      dueOn: todayDateOnly(),
-      followers: REPORT_CC_GIDS,
-    });
+    // Find-or-create: reuse today's dated subtask if it already exists under the
+    // parent (re-running the report the same day won't spawn a duplicate task);
+    // otherwise create it. If the lookup errors we let it throw rather than risk
+    // a duplicate. On reuse we leave the existing assignee/followers untouched and
+    // just append the fresh comment(s).
+    const existing = await findSubtaskByName(parentGid, taskTitle);
+    const reused = existing !== null;
+    const { gid, permalinkUrl } = existing
+      ? existing
+      : await createAsanaSubtask(parentGid, taskTitle, {
+          assignee,
+          dueOn: todayDateOnly(),
+          followers: REPORT_CC_GIDS,
+        });
 
     // 1. Scorecard metrics + hours + per-assignee (plain text), pinned to the top.
     const result = await postCommentToTask(
@@ -170,6 +180,7 @@ export async function sendScorecardToAsana(
         taskGid: gid,
         taskUrl: permalinkUrl,
         commentsPosted,
+        reused,
         error: result.error ?? 'Failed to post scorecard comment',
       };
     }
@@ -196,6 +207,7 @@ export async function sendScorecardToAsana(
       taskGid: gid,
       taskUrl: permalinkUrl,
       commentsPosted,
+      reused,
     };
   } catch (error) {
     return {
