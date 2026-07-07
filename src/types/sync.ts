@@ -68,6 +68,7 @@ export interface AsanaTask {
   created_at: string;
   completed_at: string | null;
   completed: boolean;
+  due_on?: string | null; // "YYYY-MM-DD" or null (used by the scorecard's running rate)
   custom_fields: Array<{
     name: string;
     number_value: number | null;

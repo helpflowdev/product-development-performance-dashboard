@@ -73,6 +73,11 @@ export function buildScorecardCommentText(
     `    This Sprint: ${sc.completionRate.toFixed(2)}% (Goal: ${sc.completionGoal}%)`,
   ];
 
+  if (sc.runningCompletionRate !== null) {
+    lines.push(
+      `    Running (due to date): ${sc.runningCompletionRate.toFixed(2)}% (${sc.tasksDueCompleted}/${sc.tasksDue} due)`,
+    );
+  }
   if (sc.qtdCompletionRate !== null) {
     lines.push(`    QTD: ${sc.qtdCompletionRate.toFixed(2)}%`);
   }

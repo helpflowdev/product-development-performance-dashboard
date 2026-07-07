@@ -62,6 +62,60 @@ function resolveSprintId(rows: SprintRow[], requested?: string): string {
   return (lastCompleted ?? sprints[0]).id;
 }
 
+/** Running (to-date) completion, keyed off Asana due dates. See computeRunningCompletion. */
+export interface RunningCompletion {
+  runningCompletionRate: number | null;
+  tasksDue: number;
+  tasksDueCompleted: number;
+  tasksNoDueDate: number;
+}
+
+/**
+ * Running / to-date completion rate: of the sprint's tasks that are DUE on or
+ * before today (by Asana due date), how many are complete. This is the metric
+ * that reads ~100% mid-sprint when the team is on pace — the final completionRate
+ * can't, because its denominator is the whole sprint (incl. not-yet-due tasks).
+ *
+ * `dueByLink` maps a task's permalink (= the sheet's "Link to Task") to its
+ * Asana `due_on` ('YYYY-MM-DD', or '' when no due date is set). Tasks with no due
+ * date — or not found in the map — are excluded from the ratio and counted in
+ * tasksNoDueDate. Pure except for reading today's date (like the burndown's
+ * to-date pace); YYYY-MM-DD compares lexicographically. Rate is null when no
+ * due-dated tasks are in range (e.g. before any task's due date, or the Asana
+ * lookup returned nothing).
+ */
+export function computeRunningCompletion(
+  sprintRows: SprintRow[],
+  dueByLink: Map<string, string>,
+): RunningCompletion {
+  const today = todayDateString();
+  let tasksDue = 0;
+  let tasksDueCompleted = 0;
+  let tasksNoDueDate = 0;
+
+  for (const row of sprintRows) {
+    const link = row.linkToTask.trim();
+    const dueOn = (link && dueByLink.get(link)) || '';
+    if (!dueOn) {
+      tasksNoDueDate++;
+      continue;
+    }
+    if (dueOn <= today) {
+      tasksDue++;
+      if (row.status.trim() === 'Complete') tasksDueCompleted++;
+    }
+    // dueOn > today → not yet due → excluded from the running ratio.
+  }
+
+  return {
+    runningCompletionRate:
+      tasksDue > 0 ? Math.round((tasksDueCompleted / tasksDue) * 10000) / 100 : null,
+    tasksDue,
+    tasksDueCompleted,
+    tasksNoDueDate,
+  };
+}
+
 export function computeScorecard(
   allRows: SprintRow[],
   input: ScorecardInput,
@@ -108,6 +162,13 @@ export function computeScorecard(
     qtdCompletionRate: computeQtdCompletionRate(allRows, sprintId),
     totalTasks: teamSummary.totalTasks,
     totalCompleted: teamSummary.totalCompleted,
+    // Running/to-date completion needs live Asana due dates — the route fetches
+    // them and overwrites these defaults (engine stays pure/sync).
+    runningCompletionRate: null,
+    tasksDue: 0,
+    tasksDueCompleted: 0,
+    tasksNoDueDate: 0,
+    runningCompletionError: null,
     devsCompletionRate,
     teamCompletionRate: teamSummary.completionRate,
     allottedStoryPoints: input.allottedStoryPoints,

@@ -19,11 +19,23 @@ export interface ScorecardResponse {
   sprintId: string; // the sprint the scorecard reports on (default: latest completed)
   dateRange: string; // "MM/DD/YYYY – MM/DD/YYYY" from the sprint dates
 
-  completionRate: number; // this-sprint, computeSummary
+  completionRate: number; // this-sprint, computeSummary (final: completed ÷ all plotted)
   completionGoal: number; // target, default 95
   qtdCompletionRate: number | null; // quarter-to-date trend (replaces YTD)
   totalTasks: number;
   totalCompleted: number;
+
+  // Running / to-date completion: of the tasks DUE on or before today (by Asana
+  // due date), how many are complete. Reads ~100% mid-sprint when on pace, unlike
+  // the final rate whose denominator is the whole sprint. Due dates are fetched
+  // live from Asana (not in the sheet), so the route attaches these;
+  // runningCompletionRate is null when no due-dated tasks are in range or the
+  // lookup was unavailable (see runningCompletionError).
+  runningCompletionRate: number | null; // tasksDueCompleted ÷ tasksDue * 100
+  tasksDue: number; // tasks with a due date on/before today
+  tasksDueCompleted: number; // of those, Status === "Complete"
+  tasksNoDueDate: number; // sprint tasks with no Asana due date (excluded from running)
+  runningCompletionError: string | null; // set only if the Asana due-date lookup failed
 
   devsCompletionRate: number; // role === "Developer" (or isDevMember) subset
   teamCompletionRate: number; // whole team

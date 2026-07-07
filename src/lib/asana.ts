@@ -583,7 +583,7 @@ export async function fetchProjectTasks(
   projectGid: string,
   log?: LogFn,
 ): Promise<AsanaTask[]> {
-  const url = `${ASANA_BASE_URL}/projects/${projectGid}/tasks?opt_fields=name,permalink_url,assignee.name,created_at,completed_at,completed,custom_fields&limit=100`;
+  const url = `${ASANA_BASE_URL}/projects/${projectGid}/tasks?opt_fields=name,permalink_url,assignee.name,created_at,completed_at,completed,due_on,custom_fields&limit=100`;
   const headers = getHeaders();
 
   const allTasks: AsanaTask[] = [];
@@ -616,4 +616,34 @@ export async function fetchProjectTasks(
   } while (nextPageUrl && totalPages < maxPages);
 
   return allTasks;
+}
+
+/**
+ * Fetch each task's Asana due date ("due_on") for a sprint, keyed by the task's
+ * permalink URL (which matches the sheet's "Link to Task" column). Used by the
+ * Weekly Scorecard's running/to-date completion rate — due dates aren't synced
+ * into the sheet, so we read them live from Asana for the selected sprint only.
+ *
+ * Resolves the sprint's Asana project by exact name — the workspace typeahead
+ * first (one cheap call), falling back to the team-scoped project list. Returns
+ * an empty map if the project can't be found or has no tasks; the value is '' for
+ * a task with no due date set. Never throws for a missing project — callers treat
+ * an empty map as "no due dates available".
+ */
+export async function fetchSprintTaskDueDates(
+  sprintName: string,
+  log?: LogFn,
+): Promise<Map<string, string>> {
+  const project =
+    (await findProjectInWorkspace(sprintName, log)) ??
+    (await findAsanaProject(sprintName, log));
+
+  const dueByLink = new Map<string, string>();
+  if (!project) return dueByLink;
+
+  const tasks = await fetchProjectTasks(project.gid, log);
+  for (const t of tasks) {
+    if (t.permalink_url) dueByLink.set(t.permalink_url, t.due_on ?? '');
+  }
+  return dueByLink;
 }

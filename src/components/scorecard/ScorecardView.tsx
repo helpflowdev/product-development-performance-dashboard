@@ -123,6 +123,17 @@ export function ScorecardView({ scorecard: sc }: ScorecardViewProps) {
       ? `Actual/Est: ${((sc.totalHoursActual / sc.totalHoursEstimate) * 100).toFixed(1)}%`
       : undefined;
 
+  // Running / to-date completion (due-based). null when no due-dated tasks are in
+  // range or the Asana due-date lookup was unavailable.
+  const runningValue =
+    sc.runningCompletionRate !== null ? `${sc.runningCompletionRate.toFixed(2)}%` : '—';
+  const runningSub =
+    sc.runningCompletionRate !== null
+      ? `${sc.tasksDueCompleted}/${sc.tasksDue} due to date`
+      : sc.runningCompletionError
+        ? 'due dates unavailable'
+        : 'no tasks due yet';
+
   return (
     <div className="space-y-4">
       {/* Sprint + date range */}
@@ -138,28 +149,35 @@ export function ScorecardView({ scorecard: sc }: ScorecardViewProps) {
         <MetricTile
           label="Completion — This Sprint"
           value={`${sc.completionRate.toFixed(2)}%`}
-          sub={`Goal: ${sc.completionGoal}% ${meetsGoal ? '✓' : '✗'}`}
+          sub={`Goal: ${sc.completionGoal}% ${meetsGoal ? '✓' : '✗'} · final (all plotted)`}
           valueClass={meetsGoal ? 'text-emerald-400' : 'text-amber-400'}
+        />
+        <MetricTile
+          label="Completion — Running"
+          value={runningValue}
+          sub={runningSub}
         />
         <MetricTile
           label="Completion — QTD"
           value={sc.qtdCompletionRate !== null ? `${sc.qtdCompletionRate.toFixed(2)}%` : '—'}
         />
         <MetricTile label="Devs" value={`${sc.devsCompletionRate.toFixed(2)}%`} />
+      </div>
+
+      {/* Team + tasks + burndown context */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <MetricTile
           label="Product Development Team"
           value={`${sc.teamCompletionRate.toFixed(2)}%`}
         />
-      </div>
-
-      {/* Tasks + burndown tiles */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <MetricTile
           label="Tasks (Completed / Total)"
           value={`${sc.totalCompleted} / ${sc.totalTasks}`}
         />
-        <MetricTile label="Allotted Story Points" value={`${sc.allottedStoryPoints}`} />
-        <MetricTile label="Consumed Story Points" value={`${sc.consumedStoryPoints}`} />
+        <MetricTile
+          label="Story Points (Consumed / Allotted)"
+          value={`${sc.consumedStoryPoints} / ${sc.allottedStoryPoints}`}
+        />
         <MetricTile label="Burndown Rate" value={`${sc.burndownRate.toFixed(2)}%`} />
       </div>
 
@@ -182,6 +200,9 @@ export function ScorecardView({ scorecard: sc }: ScorecardViewProps) {
       <p className="text-xs text-slate-500">
         <span className="text-slate-400">This Sprint / QTD</span> use the Status
         column (same source as the Completion Rate page).{' '}
+        <span className="text-slate-400">Running</span> = of tasks due on/before
+        today (by Asana due date, fetched live), how many are complete — the
+        mid-sprint &ldquo;on-pace&rdquo; view; tasks with no due date are excluded.{' '}
         <span className="text-slate-400">Devs</span> = rows with role Developer
         (falls back to the dev roster when roles are blank).{' '}
         <span className="text-slate-400">Burndown Rate</span> = consumed ÷ allotted
