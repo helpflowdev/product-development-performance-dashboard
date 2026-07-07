@@ -1,0 +1,73 @@
+/**
+ * Weekly Scorecard types.
+ *
+ * The Scorecard is the leadership-facing health dashboard (companion to the
+ * operational per-sprint Sprint Summary). It reuses the existing engines:
+ *   - completion rate       ← completion-rate-engine (computeSummary)
+ *   - QTD trend             ← completion-rate-engine (computeQtdCompletionRate)
+ *   - devs vs team          ← completion-rate-engine + role/dev filter
+ *   - burndown / points     ← burndown-engine (computeBurndown)
+ *   - hours / per-assignee / spillover / task links ← sprint-summary-engine
+ * plus two operator inputs (allotted story points, uptime note) and an analytical
+ * Gemini narrative. Computed by `src/lib/scorecard-engine.ts`; the narrative is
+ * attached by the route after the async call (the engine stays pure/sync).
+ */
+
+import { AssigneeSummary, AssigneeTaskGroup } from './sprint-summary';
+
+export interface ScorecardResponse {
+  sprintId: string; // the sprint the scorecard reports on (default: latest completed)
+  dateRange: string; // "MM/DD/YYYY – MM/DD/YYYY" from the sprint dates
+
+  completionRate: number; // this-sprint, computeSummary
+  completionGoal: number; // target, default 95
+  qtdCompletionRate: number | null; // quarter-to-date trend (replaces YTD)
+  totalTasks: number;
+  totalCompleted: number;
+
+  devsCompletionRate: number; // role === "Developer" (or isDevMember) subset
+  teamCompletionRate: number; // whole team
+
+  allottedStoryPoints: number; // operator input
+  consumedStoryPoints: number; // computeBurndown.totalConsumedPoints
+  burndownRate: number; // computeBurndown.burndownRate (number, "%" stripped)
+
+  uptimeNote: string; // operator input, e.g. "0% downtime for HAS and MyHF."
+
+  // ── Pulled from the Sprint Summary engine (sprint-aware definitions) ──
+  // These give the weekly a fuller operational picture: hour-variance
+  // (estimation accuracy), per-named-assignee breakdown, spillover, and
+  // task-level traceability. NOTE: the summary defines "Completed" as
+  // Complete AND not carried over — a stricter rule than the status-based
+  // headline completionRate above — so per-assignee rates and carried-over
+  // counts intentionally use that lens (same duality as the two pages).
+  totalHoursEstimate: number;
+  totalHoursActual: number;
+  assignees: AssigneeSummary[]; // per-assignee: completed/plotted % + hours
+  carriedOverCount: number; // spillover into the next sprint
+  carriedOverTasks: AssigneeTaskGroup[]; // hyperlinked, grouped per assignee
+  completedTasks: AssigneeTaskGroup[]; // traceability
+  incompleteTasks: AssigneeTaskGroup[]; // unfinished, not carried over
+
+  narrative: string | null; // analytical summary (Gemini); null if unavailable
+  narrativeError: string | null; // short reason when narrative is null (null when no key)
+
+  computedAt: string; // ISO timestamp
+}
+
+export interface ScorecardInput {
+  sprintId?: string; // default: most recent completed sprint
+  allottedStoryPoints: number;
+  uptimeNote?: string;
+  completionGoal?: number; // default 95
+}
+
+/** Result of pushing a scorecard to Asana. */
+export interface ScorecardSendResult {
+  success: boolean;
+  sprintId: string;
+  taskGid?: string;
+  taskUrl?: string;
+  commentsPosted?: number;
+  error?: string;
+}

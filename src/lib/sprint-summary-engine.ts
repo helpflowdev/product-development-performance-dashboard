@@ -6,6 +6,7 @@ import {
   TaskRef,
 } from '@/types/sprint-summary';
 import { resolveNextSprintName } from './burndown-engine';
+import { computeQtdCompletionRate } from './completion-rate-engine';
 
 /**
  * Sprint Summary engine.
@@ -157,6 +158,8 @@ export function computeSprintSummary(
 
   let totalHoursEstimate = 0;
   let totalHoursActual = 0;
+  let totalStoryPointsPlotted = 0;
+  let totalStoryPointsCompleted = 0;
 
   for (const row of sprintTasks) {
     const assignee = resolveAssignee(row.assigneeName.trim());
@@ -169,6 +172,12 @@ export function computeSprintSummary(
     const hoursActual = parseFloat(row.hoursActual) || 0;
     totalHoursEstimate += hoursEstimate;
     totalHoursActual += hoursActual;
+
+    // Story points follow the same sprint-aware rule as the counts: a task
+    // carried into the next sprint contributes to plotted but not completed.
+    const storyPoints = parseFloat(row.storyPoints) || 0;
+    totalStoryPointsPlotted += storyPoints;
+    if (completed) totalStoryPointsCompleted += storyPoints;
 
     if (!metrics[assignee]) {
       metrics[assignee] = { total: 0, completed: 0, hoursEstimate: 0, hoursActual: 0 };
@@ -219,6 +228,13 @@ export function computeSprintSummary(
     completionRate: plottedCount > 0 ? (completedItems.length / plottedCount) * 100 : 0,
     totalHoursEstimate,
     totalHoursActual,
+    totalStoryPointsPlotted,
+    totalStoryPointsCompleted,
+    storyPointBurndownRate:
+      totalStoryPointsPlotted > 0
+        ? (totalStoryPointsCompleted / totalStoryPointsPlotted) * 100
+        : 0,
+    qtdCompletionRate: computeQtdCompletionRate(allRows, target),
     assignees,
     completedTasks: groupByAssignee(completedItems),
     carriedOverTasks: groupByAssignee(carriedOverItems),

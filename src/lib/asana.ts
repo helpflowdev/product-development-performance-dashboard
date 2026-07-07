@@ -359,6 +359,43 @@ export async function createAsanaTask(
 }
 
 /**
+ * Create a task as a SUBTASK of an existing parent task and return its gid +
+ * permalink. Same request/parse shape as createAsanaTask, but posts `parent`
+ * instead of `projects` so the new task collects under a standing parent task
+ * (e.g. "DEV - End of Sprint Summary" / "Dev - Weekly Scorecard Report") rather
+ * than landing as a standalone task in a project. Optionally sets an assignee
+ * (user gid) and a due date (YYYY-MM-DD).
+ */
+export async function createAsanaSubtask(
+  parentGid: string,
+  name: string,
+  opts: { assignee?: string; dueOn?: string } = {},
+): Promise<{ gid: string; permalinkUrl: string }> {
+  const url = `${ASANA_BASE_URL}/tasks?opt_fields=permalink_url,name`;
+  const data: Record<string, unknown> = { name, parent: parentGid };
+  if (opts.assignee) data.assignee = opts.assignee;
+  if (opts.dueOn) data.due_on = opts.dueOn;
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify({ data }),
+  });
+
+  const json = await response.json().catch(() => ({}));
+  if (response.status !== 201) {
+    const message = json?.errors?.[0]?.message ?? `HTTP ${response.status}`;
+    throw new Error(`Failed to create Asana subtask: ${message}`);
+  }
+
+  const gid = json.data.gid as string;
+  const permalinkUrl =
+    (json.data.permalink_url as string | undefined) ??
+    `https://app.asana.com/0/0/${gid}`;
+  return { gid, permalinkUrl };
+}
+
+/**
  * Post a single comment (story) to a task. Never throws — returns a result
  * carrying Asana's error text on failure (so callers can detect "too large").
  * Options: `asHtml` sends Asana rich text (`html_text`, wrapped in <body>…</body>)

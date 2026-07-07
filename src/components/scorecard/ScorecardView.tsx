@@ -3,31 +3,39 @@
 import { useState } from 'react';
 import { Card } from '@/components/ui/Card';
 import { formatHours } from '@/lib/format';
-import { AssigneeTaskGroup, SprintSummaryResponse } from '@/types/sprint-summary';
+import { ScorecardResponse } from '@/types/scorecard';
+import { AssigneeTaskGroup } from '@/types/sprint-summary';
 
-interface SprintSummaryViewProps {
-  summary: SprintSummaryResponse;
+interface ScorecardViewProps {
+  scorecard: ScorecardResponse;
 }
 
-/** One stat tile in the top row. */
-function MetricTile({ label, value }: { label: string; value: string }) {
+/** One stat tile, with an optional sub-line under the value. */
+function MetricTile({
+  label,
+  value,
+  sub,
+  valueClass = 'text-white',
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+  valueClass?: string;
+}) {
   return (
     <Card className="text-center">
       <p className="text-xs uppercase tracking-wide text-slate-400">{label}</p>
-      <p className="mt-2 text-2xl font-bold text-white">{value}</p>
+      <p className={`mt-2 text-2xl font-bold ${valueClass}`}>{value}</p>
+      {sub && <p className="mt-1 text-xs text-slate-400">{sub}</p>}
     </Card>
   );
 }
 
-/** Total task count across all assignee groups. */
 function countTasks(groups: AssigneeTaskGroup[]): number {
   return groups.reduce((sum, g) => sum + g.tasks.length, 0);
 }
 
-/**
- * Collapsible list section: tasks grouped per assignee, each task a hyperlinked
- * title under a "Name (count):" heading.
- */
+/** Collapsible list: tasks grouped per assignee, each a hyperlinked title. */
 function GroupedTaskList({
   title,
   groups,
@@ -62,7 +70,6 @@ function GroupedTaskList({
       </button>
 
       {open && (
-        // Scroll long lists inside the box so the page stays compact.
         <div className="list-scroll mt-3 max-h-64 overflow-y-auto pr-2 space-y-3">
           {total === 0 ? (
             <p className="text-sm text-slate-500">No tasks.</p>
@@ -101,59 +108,89 @@ function GroupedTaskList({
 }
 
 /**
- * Renders a computed Sprint Summary on the page (Burndown-style layout) so it
- * can be reviewed before sending to Asana.
+ * Renders a computed Weekly Scorecard for review before sending to Asana. Shows
+ * the leadership metrics (completion this-sprint vs QTD, devs vs team, story-
+ * point burndown) plus the Sprint-Summary-derived detail the team asked to pull
+ * in: estimation accuracy (hours), per-assignee breakdown, spillover, and
+ * task-level traceability. The editable uptime note and analytical narrative
+ * live on the page above this.
  */
-export function SprintSummaryView({ summary }: SprintSummaryViewProps) {
+export function ScorecardView({ scorecard: sc }: ScorecardViewProps) {
+  const meetsGoal = sc.completionRate >= sc.completionGoal;
+  const hoursVariance = sc.totalHoursActual - sc.totalHoursEstimate;
+  const accuracy =
+    sc.totalHoursEstimate > 0
+      ? `Actual/Est: ${((sc.totalHoursActual / sc.totalHoursEstimate) * 100).toFixed(1)}%`
+      : undefined;
+
   return (
     <div className="space-y-4">
-      {summary.warning && (
-        <Card className="border border-yellow-500/40 bg-yellow-500/10">
-          <p className="text-sm text-yellow-300">⚠️ {summary.warning}</p>
-        </Card>
-      )}
+      {/* Sprint + date range */}
+      <Card>
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h3 className="font-semibold text-white">{sc.sprintId}</h3>
+          <span className="text-sm text-slate-400">{sc.dateRange}</span>
+        </div>
+      </Card>
 
-      {/* Metric tiles */}
+      {/* Completion rate tiles */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <MetricTile label="Completed Tasks" value={`${summary.completedCount}`} />
-        <MetricTile label="Plotted Tasks" value={`${summary.plottedCount}`} />
-        <MetricTile label="Completion Rate" value={`${summary.completionRate.toFixed(2)}%`} />
+        <MetricTile
+          label="Completion — This Sprint"
+          value={`${sc.completionRate.toFixed(2)}%`}
+          sub={`Goal: ${sc.completionGoal}% ${meetsGoal ? '✓' : '✗'}`}
+          valueClass={meetsGoal ? 'text-emerald-400' : 'text-amber-400'}
+        />
+        <MetricTile
+          label="Completion — QTD"
+          value={sc.qtdCompletionRate !== null ? `${sc.qtdCompletionRate.toFixed(2)}%` : '—'}
+        />
+        <MetricTile label="Devs" value={`${sc.devsCompletionRate.toFixed(2)}%`} />
+        <MetricTile
+          label="Product Development Team"
+          value={`${sc.teamCompletionRate.toFixed(2)}%`}
+        />
+      </div>
+
+      {/* Tasks + burndown tiles */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <MetricTile
+          label="Tasks (Completed / Total)"
+          value={`${sc.totalCompleted} / ${sc.totalTasks}`}
+        />
+        <MetricTile label="Allotted Story Points" value={`${sc.allottedStoryPoints}`} />
+        <MetricTile label="Consumed Story Points" value={`${sc.consumedStoryPoints}`} />
+        <MetricTile label="Burndown Rate" value={`${sc.burndownRate.toFixed(2)}%`} />
+      </div>
+
+      {/* Hours (estimation accuracy) + spillover */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <MetricTile
           label="Est / Actual Hours"
-          value={`${formatHours(summary.totalHoursEstimate)} / ${formatHours(summary.totalHoursActual)}`}
+          value={`${formatHours(sc.totalHoursEstimate)} / ${formatHours(sc.totalHoursActual)}`}
         />
+        <MetricTile
+          label="Hours Variance"
+          value={`${hoursVariance >= 0 ? '+' : ''}${formatHours(hoursVariance)}`}
+          sub={accuracy}
+          valueClass={hoursVariance <= 0 ? 'text-emerald-400' : 'text-amber-400'}
+        />
+        <MetricTile label="Carried Over" value={`${sc.carriedOverCount}`} />
+        <MetricTile label="Assignees" value={`${sc.assignees.length}`} />
       </div>
 
-      {/* Story points + trend */}
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-        <MetricTile
-          label="Story Points (Done / Plotted)"
-          value={`${formatHours(summary.totalStoryPointsCompleted)} / ${formatHours(summary.totalStoryPointsPlotted)}`}
-        />
-        <MetricTile
-          label="SP Burndown Rate"
-          value={`${summary.storyPointBurndownRate.toFixed(2)}%`}
-        />
-        <MetricTile
-          label="Completion QTD"
-          value={
-            summary.qtdCompletionRate !== null
-              ? `${summary.qtdCompletionRate.toFixed(2)}%`
-              : '—'
-          }
-        />
-      </div>
-
-      {/* Definitions note */}
       <p className="text-xs text-slate-500">
-        <span className="text-slate-400">Completed</span> = finished and not carried
-        to the next sprint. <span className="text-slate-400">Carried Over</span> =
-        added to the next sprint (any status).{' '}
-        <span className="text-slate-400">Plotted</span> = all tasks in this sprint,
-        including recurring (DT)/(WT)/(ST).
+        <span className="text-slate-400">This Sprint / QTD</span> use the Status
+        column (same source as the Completion Rate page).{' '}
+        <span className="text-slate-400">Devs</span> = rows with role Developer
+        (falls back to the dev roster when roles are blank).{' '}
+        <span className="text-slate-400">Burndown Rate</span> = consumed ÷ allotted
+        story points (matches the Burndown page). Per-assignee, hours, carried-over,
+        and the task lists below are pulled from the Sprint Summary, whose
+        &ldquo;completed&rdquo; excludes tasks carried into the next sprint.
       </p>
 
-      {/* Per-assignee breakdown */}
+      {/* Per-assignee breakdown (from the Sprint Summary) */}
       <Card>
         <h3 className="font-semibold text-white mb-4">Per-Assignee Breakdown</h3>
         <div className="overflow-x-auto">
@@ -166,7 +203,7 @@ export function SprintSummaryView({ summary }: SprintSummaryViewProps) {
               </tr>
             </thead>
             <tbody>
-              {summary.assignees.map((a) => {
+              {sc.assignees.map((a) => {
                 const noHours = a.hoursEstimate === 0 && a.hoursActual === 0;
                 return (
                   <tr key={a.name} className="border-b border-white/5 last:border-b-0">
@@ -187,37 +224,26 @@ export function SprintSummaryView({ summary }: SprintSummaryViewProps) {
         </div>
       </Card>
 
-      {/* Task lists */}
+      {/* Task-level traceability (from the Sprint Summary) */}
       <GroupedTaskList
         title="Completed Tasks"
-        groups={summary.completedTasks}
+        groups={sc.completedTasks}
         accent="text-emerald-400"
-        defaultOpen
       />
       <GroupedTaskList
         title="Carried Over to Next Sprint"
-        groups={summary.carriedOverTasks}
+        groups={sc.carriedOverTasks}
         accent="text-amber-400"
         defaultOpen
       />
-      {summary.incompleteCount > 0 && (
+      {sc.incompleteTasks.length > 0 && (
         <GroupedTaskList
           title="Incomplete (Not Carried Over)"
-          groups={summary.incompleteTasks}
+          groups={sc.incompleteTasks}
           accent="text-rose-400"
           defaultOpen
         />
       )}
-      <GroupedTaskList
-        title={
-          summary.nextSprintName
-            ? `Next Sprint Tasks — ${summary.nextSprintName}`
-            : 'Next Sprint Tasks'
-        }
-        groups={summary.nextSprintTasks}
-        accent="text-cyan-400"
-        defaultOpen
-      />
     </div>
   );
 }

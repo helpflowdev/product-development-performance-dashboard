@@ -126,6 +126,50 @@ export function computeSummary(rows: SprintRow[]): CompletionRateSummary {
 }
 
 /**
+ * Parse the year/quarter/sprint from a sprint id, e.g.
+ * "Sprint #2026.Q2.S7 (0618-0701)" → { year: "2026", quarter: 2, sprint: 7 }.
+ * Returns null when the id doesn't follow the naming convention.
+ */
+export function parseSprintQuarter(
+  sprintId: string,
+): { year: string; quarter: number; sprint: number } | null {
+  const m = sprintId.match(/#(\d{4})\.Q(\d)\.S(\d+)/);
+  return m ? { year: m[1], quarter: Number(m[2]), sprint: Number(m[3]) } : null;
+}
+
+/**
+ * Quarter-to-date completion rate: aggregate every row in the SAME year+quarter
+ * as `sprintId`, up to and including that sprint, then compute completion by
+ * COUNTS (completed / plotted * 100) via computeSummary — not by averaging
+ * per-sprint rates. Returns null when the sprint id can't be parsed into a
+ * quarter (caller falls back to the this-sprint rate).
+ *
+ * Used by both the Sprint Summary (trend line) and the Weekly Scorecard (QTD
+ * trend), so they share one definition. QTD equals the this-sprint rate for the
+ * first sprint of a quarter (only that sprint's rows are in range).
+ */
+export function computeQtdCompletionRate(
+  allRows: SprintRow[],
+  sprintId: string,
+): number | null {
+  const selected = parseSprintQuarter(sprintId);
+  if (!selected) return null;
+
+  const qtdRows = allRows.filter((row) => {
+    const o = parseSprintQuarter(row.sprint);
+    return (
+      o !== null &&
+      o.year === selected.year &&
+      o.quarter === selected.quarter &&
+      o.sprint <= selected.sprint
+    );
+  });
+
+  // TODO rolling: swap for a rolling-3-sprint average if the team prefers it.
+  return computeSummary(qtdRows).completionRate;
+}
+
+/**
  * Compute per-sprint statistics from rows, grouped by sprint ID.
  * Returns one SprintCompletionStat per unique sprint, sorted chronologically (ascending).
  */

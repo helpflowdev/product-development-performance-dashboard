@@ -51,6 +51,15 @@ export interface SprintSummaryResponse {
   totalHoursEstimate: number;
   totalHoursActual: number;
 
+  // Story points (sprint-aware, same completed/carried-over rule as the counts).
+  totalStoryPointsPlotted: number; // sum of storyPoints across all sprint tasks
+  totalStoryPointsCompleted: number; // sum where Complete AND not carried over
+  storyPointBurndownRate: number; // completed / plotted * 100 (0 when plotted === 0)
+
+  // Trend: quarter-to-date completion rate (same year+quarter, up to this sprint).
+  // null when the sprint id can't be parsed into a quarter.
+  qtdCompletionRate: number | null;
+
   // Per-assignee breakdown, ordered: known team members first, then others, Unknown last.
   assignees: AssigneeSummary[];
 

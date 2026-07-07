@@ -88,6 +88,119 @@ async function resolveModel(
   return { model: picked, error: null };
 }
 
+/**
+ * System prompt for the Weekly Scorecard's analytical narrative. Unlike the
+ * focus summary (which answers "what was worked on"), this answers "why the
+ * numbers moved" — grounded only in the metrics handed in.
+ */
+const SCORECARD_SYSTEM_PROMPT = [
+  "You are writing the analytical summary for a software team's weekly leadership",
+  'scorecard. You are given the computed metrics for one sprint (completion rate',
+  'this sprint vs. quarter-to-date, developers vs. whole-team completion, story-point',
+  'burndown, and optionally hours). Write a concise 3–5 sentence analysis of what the',
+  'numbers indicate and the likely drivers (team capacity, time off/UTOs, scope added',
+  'mid-sprint, estimation accuracy) — framed for leadership. Only reason from the',
+  'numbers provided; do not invent specific tasks, names, or events the numbers do not',
+  'imply, and do not simply restate every figure. Respond with only the analysis prose',
+  '— no preamble, headings, bullet points, or meta-commentary.',
+].join(' ');
+
+/** Metrics fed to the scorecard narrative generator. */
+export interface ScorecardNarrativeInput {
+  sprintId: string;
+  completionRate: number;
+  completionGoal: number;
+  qtdCompletionRate: number | null;
+  devsCompletionRate: number;
+  teamCompletionRate: number;
+  allottedStoryPoints: number;
+  consumedStoryPoints: number;
+  burndownRate: number;
+  totalHoursEstimate?: number;
+  totalHoursActual?: number;
+}
+
+/**
+ * Generate the Weekly Scorecard's analytical "why the numbers moved" narrative
+ * via Gemini. Same plumbing/contract as generateFocusSummary — never throws,
+ * returns { summary, error }, and reuses the resolved model. Returns
+ * { summary: null, error: null } when no GEMINI_API_KEY is configured.
+ */
+export async function generateScorecardNarrative(
+  input: ScorecardNarrativeInput,
+): Promise<FocusResult> {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) return { summary: null, error: null };
+
+  const qtd =
+    input.qtdCompletionRate !== null
+      ? `${input.qtdCompletionRate.toFixed(2)}%`
+      : 'n/a';
+  const hoursLine =
+    input.totalHoursEstimate !== undefined && input.totalHoursActual !== undefined
+      ? `\n- Hours (actual / estimate): ${input.totalHoursActual} / ${input.totalHoursEstimate}`
+      : '';
+
+  const metrics = [
+    `Sprint: ${input.sprintId}`,
+    `Completion rate this sprint: ${input.completionRate.toFixed(2)}% (goal ${input.completionGoal}%)`,
+    `Completion rate quarter-to-date: ${qtd}`,
+    `Developers completion rate: ${input.devsCompletionRate.toFixed(2)}%`,
+    `Whole-team completion rate: ${input.teamCompletionRate.toFixed(2)}%`,
+    `Story points consumed / allotted: ${input.consumedStoryPoints} / ${input.allottedStoryPoints}`,
+    `Story-point burndown rate: ${input.burndownRate.toFixed(2)}%`,
+  ].join('\n- ');
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+  try {
+    const { model, error } = await resolveModel(apiKey, controller.signal);
+    if (!model) return { summary: null, error };
+
+    const response = await fetch(`${API_BASE}/models/${model}:generateContent`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+      body: JSON.stringify({
+        system_instruction: { parts: [{ text: SCORECARD_SYSTEM_PROMPT }] },
+        contents: [
+          {
+            role: 'user',
+            parts: [{ text: `Metrics:\n- ${metrics}${hoursLine}` }],
+          },
+        ],
+        generationConfig: { maxOutputTokens: 512, temperature: 0.3 },
+      }),
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      const detail = snippet(await response.text().catch(() => ''));
+      console.error(`[scorecard-narrative] Gemini HTTP ${response.status}: ${detail}`);
+      return { summary: null, error: `Gemini "${model}" HTTP ${response.status}: ${detail}` };
+    }
+
+    const data = (await response.json()) as {
+      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+    };
+    const text = (data.candidates?.[0]?.content?.parts ?? [])
+      .map((p) => p.text ?? '')
+      .join('')
+      .trim();
+
+    if (!text) return { summary: null, error: `Gemini "${model}" returned no text.` };
+
+    cachedModel = model; // remember the working model
+    return { summary: text, error: null };
+  } catch (error) {
+    const msg = controller.signal.aborted ? 'Gemini request timed out.' : String(error);
+    console.error('[scorecard-narrative] generation failed:', error);
+    return { summary: null, error: snippet(msg) };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function generateFocusSummary(
   sprintName: string,
   taskTitles: string[],

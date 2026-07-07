@@ -1,7 +1,7 @@
 import { SprintSummaryResponse, SendToAsanaResult } from '@/types/sprint-summary';
 import { formatHours } from './format';
 import {
-  createAsanaTask,
+  createAsanaSubtask,
   postCommentToTask,
   postGroupedTaskListInChunks,
 } from './asana';
@@ -9,14 +9,15 @@ import {
 /**
  * Sends a computed Sprint Summary to Asana.
  *
- * Creates a `Sprint Summary: <name>` task in the configured project, posts the
- * metrics + per-assignee breakdown as a plain-text comment, then posts the
- * Completed / Carried-Over / Incomplete / Next-Sprint lists as rich-text comments
- * with hyperlinked titles grouped per assignee.
+ * Creates a `Sprint Summary: <name>` SUBTASK under the standing parent task
+ * "DEV - End of Sprint Summary" (so every sprint's summary collects under one
+ * parent), posts the metrics + per-assignee breakdown as a plain-text comment,
+ * then posts the Completed / Carried-Over / Incomplete / Next-Sprint lists as
+ * rich-text comments with hyperlinked titles grouped per assignee.
  */
 
-/** Asana project the summary task is created in (the legacy macro's project). */
-const DEFAULT_SUMMARY_PROJECT_ID = '514125768649585';
+/** Standing parent task the summary subtask is created under ("DEV - End of Sprint Summary"). */
+const DEFAULT_SUMMARY_PARENT_TASK_ID = '1216367392606773';
 
 /** Asana user the summary task is assigned to (Shann Bryle Rubido). */
 const DEFAULT_SUMMARY_ASSIGNEE_ID = '1166606777471938';
@@ -57,9 +58,26 @@ export function buildSummaryCommentText(summary: SprintSummaryResponse): string 
     `Plotted Tasks: ${summary.plottedCount}`,
     `Carried Over to Next Sprint: ${summary.carriedOverCount}`,
     `Completion Rate: ${summary.completionRate.toFixed(2)}%`,
+  );
+
+  // Trend: this-sprint vs quarter-to-date (falls back to this-sprint when the
+  // sprint id can't be parsed into a quarter).
+  lines.push(
+    summary.qtdCompletionRate !== null
+      ? `Completion Rate (This Sprint / QTD): ${summary.completionRate.toFixed(
+          2,
+        )}% / ${summary.qtdCompletionRate.toFixed(2)}%`
+      : `Completion Rate (This Sprint): ${summary.completionRate.toFixed(2)}%`,
+  );
+
+  lines.push(
     `Total Estimated vs Actual Hours: ${formatHours(
       summary.totalHoursEstimate,
     )} / ${formatHours(summary.totalHoursActual)}`,
+    `Story Points (Completed / Plotted): ${formatHours(
+      summary.totalStoryPointsCompleted,
+    )} / ${formatHours(summary.totalStoryPointsPlotted)}`,
+    `Story Point Burndown Rate: ${summary.storyPointBurndownRate.toFixed(2)}%`,
     'Completed vs Plotted (per assignee):',
   );
 
@@ -83,16 +101,17 @@ export function buildSummaryCommentText(summary: SprintSummaryResponse): string 
 export async function sendSprintSummaryToAsana(
   summary: SprintSummaryResponse,
 ): Promise<SendToAsanaResult> {
-  const projectId =
-    process.env.ASANA_SUMMARY_PROJECT_ID ?? DEFAULT_SUMMARY_PROJECT_ID;
+  const parentGid =
+    process.env.ASANA_SUMMARY_PARENT_TASK_ID ?? DEFAULT_SUMMARY_PARENT_TASK_ID;
   const assignee =
     process.env.ASANA_SUMMARY_ASSIGNEE_ID ?? DEFAULT_SUMMARY_ASSIGNEE_ID;
   const taskTitle = `Sprint Summary: ${summary.sprintId}`;
 
   let commentsPosted = 0;
   try {
-    // Assigned to Shann Bryle Rubido, due today.
-    const { gid, permalinkUrl } = await createAsanaTask(projectId, taskTitle, {
+    // Created as a subtask under "DEV - End of Sprint Summary", assigned to
+    // Shann Bryle Rubido, due today.
+    const { gid, permalinkUrl } = await createAsanaSubtask(parentGid, taskTitle, {
       assignee,
       dueOn: todayDateOnly(),
     });
