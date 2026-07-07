@@ -369,12 +369,15 @@ export async function createAsanaTask(
 export async function createAsanaSubtask(
   parentGid: string,
   name: string,
-  opts: { assignee?: string; dueOn?: string } = {},
+  opts: { assignee?: string; dueOn?: string; followers?: string[] } = {},
 ): Promise<{ gid: string; permalinkUrl: string }> {
   const url = `${ASANA_BASE_URL}/tasks?opt_fields=permalink_url,name`;
   const data: Record<string, unknown> = { name, parent: parentGid };
   if (opts.assignee) data.assignee = opts.assignee;
   if (opts.dueOn) data.due_on = opts.dueOn;
+  // Followers = the Asana equivalent of "cc": they're notified and can watch the
+  // task. Bad gids would fail the whole create, so callers pass verified gids.
+  if (opts.followers && opts.followers.length > 0) data.followers = opts.followers;
 
   const response = await fetch(url, {
     method: 'POST',

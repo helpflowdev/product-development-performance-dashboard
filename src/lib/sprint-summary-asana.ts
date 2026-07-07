@@ -1,5 +1,6 @@
 import { SprintSummaryResponse, SendToAsanaResult } from '@/types/sprint-summary';
 import { formatHours } from './format';
+import { REPORT_CC_GIDS, REPORT_CC_NAMES } from './report-recipients';
 import {
   createAsanaSubtask,
   postCommentToTask,
@@ -93,6 +94,8 @@ export function buildSummaryCommentText(summary: SprintSummaryResponse): string 
     );
   }
 
+  lines.push(`cc: ${REPORT_CC_NAMES}`);
+
   return lines
     .map((line) => (line.endsWith(':') ? `\n${line}\n` : line))
     .join('\n');
@@ -114,6 +117,7 @@ export async function sendSprintSummaryToAsana(
     const { gid, permalinkUrl } = await createAsanaSubtask(parentGid, taskTitle, {
       assignee,
       dueOn: todayDateOnly(),
+      followers: REPORT_CC_GIDS,
     });
 
     // 1. Metrics + per-assignee breakdown (plain text), pinned to the top.
