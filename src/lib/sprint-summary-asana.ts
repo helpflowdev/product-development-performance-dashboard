@@ -20,8 +20,8 @@ import {
 /** Standing parent task the summary subtask is created under ("DEV - End of Sprint Summary"). */
 const DEFAULT_SUMMARY_PARENT_TASK_ID = '1216367392606773';
 
-/** Asana user the summary task is assigned to (Shann Bryle Rubido). */
-const DEFAULT_SUMMARY_ASSIGNEE_ID = '1166606777471938';
+/** Asana user the summary task is assigned to (Shann Bryle Rubido, shannbryle.rubido@helpflow.net). */
+const DEFAULT_SUMMARY_ASSIGNEE_ID = '1166606777056089';
 
 /** Small pause between comment posts to stay clear of Asana rate limits. */
 function sleep(ms: number): Promise<void> {
