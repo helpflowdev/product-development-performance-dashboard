@@ -200,7 +200,8 @@ export async function syncSprintData(
     //    row numbers stay valid as it goes.
     if (existingRowNumbers.length > 0) {
       log(`Clearing ${existingRowNumbers.length} existing row(s)...`);
-      await deleteSheetRows(existingRowNumbers);
+      const blocks = await deleteSheetRows(existingRowNumbers);
+      if (blocks > 1) log(`  (deleted as ${blocks} separate blocks)`);
     }
 
     // 8. Re-add every current task at row 3+. Insert back at the section's old

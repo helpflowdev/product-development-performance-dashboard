@@ -244,29 +244,56 @@ export async function appendSheetRows(values: string[][]): Promise<void> {
 
 /**
  * Delete rows by their 1-based row numbers.
- * Rows are deleted from bottom to top to preserve indices.
+ *
+ * Consecutive rows are collapsed into a single deleteDimension range, and the
+ * ranges are applied bottom-to-top so row numbers stay valid as we go.
+ *
+ * The merge is not a micro-optimisation: every deleteDimension request forces
+ * the row-2 ARRAYFORMULAs (open ranges like L3:L, spilling into M–W) to
+ * recalculate the entire sheet. One-request-per-row cost ~80ms each, so a
+ * 554-row sprint spent ~45s here and blew the request timeout mid-sync —
+ * leaving the section deleted and not yet rewritten. A sprint's rows sit in one
+ * contiguous block, so this normally collapses to a single request.
+ *
+ * Returns the number of ranges actually sent — if that ever climbs back into
+ * the hundreds, the sprint's rows have become fragmented and the sync is at
+ * risk of timing out again.
  */
-export async function deleteSheetRows(rowNumbers: number[]): Promise<void> {
-  if (rowNumbers.length === 0) return;
+export async function deleteSheetRows(rowNumbers: number[]): Promise<number> {
+  if (rowNumbers.length === 0) return 0;
 
   const sheetId = await getSheetTabId();
-  // Sort descending so deletions don't shift indices
-  const sorted = [...rowNumbers].sort((a, b) => b - a);
+
+  // Ascending + de-duped, so consecutive runs are adjacent and mergeable.
+  const sorted = [...new Set(rowNumbers)].sort((a, b) => a - b);
+
+  // 1-based, inclusive on both ends.
+  const ranges: Array<{ start: number; end: number }> = [];
+  for (const row of sorted) {
+    const last = ranges[ranges.length - 1];
+    if (last && row === last.end + 1) last.end = row;
+    else ranges.push({ start: row, end: row });
+  }
+
+  // Bottom-to-top: deleting a lower block never shifts the blocks above it.
+  ranges.reverse();
 
   const sheets = getWriteClient();
   await sheets.spreadsheets.batchUpdate({
     spreadsheetId: process.env.GOOGLE_SHEET_ID!,
     requestBody: {
-      requests: sorted.map((row) => ({
+      requests: ranges.map((r) => ({
         deleteDimension: {
           range: {
             sheetId,
             dimension: 'ROWS',
-            startIndex: row - 1, // convert 1-based to 0-based
-            endIndex: row,
+            startIndex: r.start - 1, // 1-based inclusive -> 0-based inclusive
+            endIndex: r.end, // 1-based inclusive -> 0-based exclusive
           },
         },
       })),
     },
   });
+
+  return ranges.length;
 }
