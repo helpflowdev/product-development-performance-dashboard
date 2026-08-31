@@ -18,6 +18,7 @@ import { AssigneeSummary, AssigneeTaskGroup } from './sprint-summary';
 export interface ScorecardResponse {
   sprintId: string; // the sprint the scorecard reports on (default: latest completed)
   sprintUrl: string | null; // Asana project permalink for the sprint (searched live); null if not found
+  sprintProjectGid: string | null; // gid of that same project — the key the send uses to find this sprint's scorecard subtask
   week: string; // the sprint's Week label, e.g. "WE192026" (most common in its rows; '' if none)
   dateRange: string; // "MM/DD/YYYY – MM/DD/YYYY" from the sprint dates
 
@@ -83,6 +84,13 @@ export interface ScorecardSendResult {
   taskGid?: string;
   taskUrl?: string;
   commentsPosted?: number;
-  reused?: boolean; // true when an existing dated subtask was reused (not created)
+  reused?: boolean; // true when an existing subtask was reused (not created)
+  /**
+   * How the target subtask was resolved: matched the open subtask filed under the
+   * sprint's own project (the normal path), matched today's exact title as a
+   * same-day re-run fallback, or nothing matched so a fresh subtask was created.
+   */
+  matchedBy?: 'sprint-project' | 'title' | 'created';
+  matchedTaskName?: string; // title of the subtask the comments were posted to
   error?: string;
 }

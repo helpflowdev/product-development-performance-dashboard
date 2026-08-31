@@ -169,18 +169,38 @@ export default function ScorecardPage() {
             <h3 className="font-semibold text-emerald-400 mb-1">Sent to Asana</h3>
             <p className="text-sm text-slate-300">
               {sendResult.reused ? 'Updated the existing' : 'Created the'} Weekly
-              Scorecard subtask (dated today) for{' '}
+              Scorecard subtask for{' '}
               <span className="text-slate-100">{scorecard.sprintId}</span>
               {typeof sendResult.commentsPosted === 'number' && (
                 <> with {sendResult.commentsPosted} comment(s).</>
               )}
-              {sendResult.reused && (
+              {sendResult.matchedBy === 'sprint-project' && (
                 <span className="text-slate-400">
                   {' '}
-                  Re-running today reuses this same subtask; the new comment is added to it.
+                  Posted to the open scorecard subtask filed under this sprint, left exactly
+                  as it was.
+                </span>
+              )}
+              {sendResult.matchedBy === 'title' && (
+                <span className="text-slate-400">
+                  {' '}
+                  This sprint had no open scorecard subtask, so it reused the one already
+                  created today; the new comment is added to it.
+                </span>
+              )}
+              {sendResult.matchedBy === 'created' && (
+                <span className="text-slate-400">
+                  {' '}
+                  This sprint had no open scorecard subtask, so a new one was created and
+                  filed under the sprint project.
                 </span>
               )}
             </p>
+            {sendResult.matchedTaskName && (
+              <p className="mt-2 text-xs text-slate-400">
+                Subtask: &ldquo;{sendResult.matchedTaskName}&rdquo;
+              </p>
+            )}
             {sendResult.taskUrl && (
               <a
                 href={sendResult.taskUrl}

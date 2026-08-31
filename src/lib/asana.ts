@@ -442,6 +442,217 @@ export async function findSubtaskByName(
 }
 
 /**
+ * Find the incomplete subtask of `parentGid` that is DUE on `dueOn` (YYYY-MM-DD),
+ * returning its gid + current name + permalink, or null if none matches.
+ *
+ * This is the primary find-or-create key for the recurring report subtasks,
+ * because the team's next-cycle subtask is normally pre-created by duplicating
+ * the previous one — so it carries the PREVIOUS cycle's date in its title while
+ * its due date is the one that actually tracks the cycle. Matching on the dated
+ * title therefore misses it and spawns a duplicate; matching on due date + open
+ * finds it.
+ *
+ * `namePattern` guards against hijacking an unrelated subtask that merely happens
+ * to be due the same day — only names matching it are eligible. When several
+ * match, the OLDEST (`created_at`) wins: that's the pre-existing task the team
+ * already tracks, not a duplicate a previous run may have created.
+ *
+ * Throws on an API error so the caller fails safe (never blindly creates a dup).
+ */
+export async function findOpenSubtaskDueOn(
+  parentGid: string,
+  dueOn: string,
+  opts: { namePattern?: RegExp } = {},
+): Promise<{ gid: string; name: string; permalinkUrl: string } | null> {
+  let nextUrl: string | null = `${ASANA_BASE_URL}/tasks/${parentGid}/subtasks?opt_fields=name,completed,due_on,created_at,permalink_url&limit=100`;
+  let pages = 0;
+  const matches: Array<{
+    gid: string;
+    name: string;
+    permalinkUrl: string;
+    createdAt: string;
+  }> = [];
+
+  while (nextUrl && pages < 10) {
+    const response: Response = await fetch(nextUrl, { method: 'GET', headers: getHeaders() });
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`Failed to fetch subtasks: ${response.status} ${text}`);
+    }
+
+    const data: {
+      data: Array<{
+        gid: string;
+        name?: string;
+        completed?: boolean;
+        due_on?: string | null;
+        created_at?: string;
+        permalink_url?: string;
+      }>;
+      next_page: { uri: string } | null;
+    } = await response.json();
+
+    for (const t of data.data) {
+      const name = (t.name ?? '').trim();
+      if (t.completed) continue;
+      if (t.due_on !== dueOn) continue;
+      if (opts.namePattern && !opts.namePattern.test(name)) continue;
+      matches.push({
+        gid: t.gid,
+        name,
+        permalinkUrl: t.permalink_url ?? `https://app.asana.com/0/0/${t.gid}`,
+        createdAt: t.created_at ?? '',
+      });
+    }
+
+    nextUrl = data.next_page ? data.next_page.uri : null;
+    pages++;
+    if (nextUrl) await sleep(RATE_LIMIT_DELAY_MS);
+  }
+
+  if (matches.length === 0) return null;
+  matches.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  const { gid, name, permalinkUrl } = matches[0];
+  return { gid, name, permalinkUrl };
+}
+
+/** Whole days between two YYYY-MM-DD strings (UTC math, so no timezone drift). */
+function daysApart(a: string, b: string): number {
+  const [ay, am, ad] = a.split('-').map(Number);
+  const [by, bm, bd] = b.split('-').map(Number);
+  return Math.abs(Date.UTC(ay, am - 1, ad) - Date.UTC(by, bm - 1, bd)) / 86_400_000;
+}
+
+/**
+ * Find the OPEN subtask of `parentGid` that belongs to `projectGid` and is due
+ * nearest to `today`, or null if the sprint has no open subtask of its own.
+ *
+ * This is the find-or-create key for the weekly scorecard, and it leans on the
+ * one thing about these subtasks that is reliable: their sprint project. The
+ * scorecard is WEEKLY while sprints are BIWEEKLY, so each sprint project holds
+ * two scorecard subtasks (S3 held the 08/02 and 08/09 ones). Titles can't be
+ * trusted — the team pre-creates each week's subtask by duplicating the previous
+ * one, which inherits the older date (the 07/13 subtask was still titled
+ * 07/07) — and an exact due-date-equals-today match is too brittle, since a run
+ * that slips by a day finds nothing and spawns a parallel subtask. Project
+ * membership pins the sprint; nearest due date picks the week within it.
+ *
+ * `namePattern` keeps an unrelated subtask under the same parent out of the
+ * running. Subtasks with no due date rank last, and ties go to the EARLIER due
+ * date — the week that has already closed, which is the one a report covers.
+ *
+ * Throws on an API error so the caller fails safe (never blindly creates a dup).
+ */
+export async function findSprintScorecardSubtask(
+  parentGid: string,
+  projectGid: string,
+  today: string,
+  opts: { namePattern: RegExp },
+): Promise<{
+  gid: string;
+  name: string;
+  dueOn: string | null;
+  permalinkUrl: string;
+} | null> {
+  let nextUrl: string | null = `${ASANA_BASE_URL}/tasks/${parentGid}/subtasks?opt_fields=name,completed,due_on,permalink_url,projects.gid&limit=100`;
+  let pages = 0;
+  const candidates: Array<{
+    gid: string;
+    name: string;
+    dueOn: string | null;
+    permalinkUrl: string;
+  }> = [];
+
+  while (nextUrl && pages < 10) {
+    const response: Response = await fetch(nextUrl, { method: 'GET', headers: getHeaders() });
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`Failed to fetch subtasks: ${response.status} ${text}`);
+    }
+
+    const data: {
+      data: Array<{
+        gid: string;
+        name?: string;
+        completed?: boolean;
+        due_on?: string | null;
+        permalink_url?: string;
+        projects?: Array<{ gid: string }>;
+      }>;
+      next_page: { uri: string } | null;
+    } = await response.json();
+
+    for (const t of data.data) {
+      const name = (t.name ?? '').trim();
+      if (t.completed) continue;
+      if (!opts.namePattern.test(name)) continue;
+      if (!(t.projects ?? []).some((p) => p.gid === projectGid)) continue;
+      candidates.push({
+        gid: t.gid,
+        name,
+        dueOn: t.due_on ?? null,
+        permalinkUrl: t.permalink_url ?? `https://app.asana.com/0/0/${t.gid}`,
+      });
+    }
+
+    nextUrl = data.next_page ? data.next_page.uri : null;
+    pages++;
+    if (nextUrl) await sleep(RATE_LIMIT_DELAY_MS);
+  }
+
+  if (candidates.length === 0) return null;
+  candidates.sort((a, b) => {
+    // Dated subtasks always outrank dateless ones...
+    if (!a.dueOn || !b.dueOn) return (a.dueOn ? 0 : 1) - (b.dueOn ? 0 : 1);
+    // ...then whichever sits closest to the run date, earlier winning a tie.
+    const byDistance = daysApart(a.dueOn, today) - daysApart(b.dueOn, today);
+    return byDistance !== 0 ? byDistance : a.dueOn.localeCompare(b.dueOn);
+  });
+  const { gid, name, dueOn, permalinkUrl } = candidates[0];
+  return { gid, name, dueOn, permalinkUrl };
+}
+
+/**
+ * Add an existing task to a project. Used so a scorecard subtask this tool had to
+ * create lands in the sprint project alongside the hand-made ones — which is also
+ * what lets the next run find it. Never throws: the comments matter more than the
+ * filing, so a failure returns false and the caller carries on posting.
+ */
+export async function addTaskToProject(
+  taskGid: string,
+  projectGid: string,
+): Promise<boolean> {
+  try {
+    const response = await fetch(`${ASANA_BASE_URL}/tasks/${taskGid}/addProject`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify({ data: { project: projectGid } }),
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Rename an existing task. Used when a reused recurring subtask still carries the
+ * previous cycle's date in its title. Never throws — a failed rename must not
+ * sink the report, so it returns false and the caller carries on posting.
+ */
+export async function renameTask(taskGid: string, name: string): Promise<boolean> {
+  try {
+    const response = await fetch(`${ASANA_BASE_URL}/tasks/${taskGid}`, {
+      method: 'PUT',
+      headers: getHeaders(),
+      body: JSON.stringify({ data: { name } }),
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Post a single comment (story) to a task. Never throws — returns a result
  * carrying Asana's error text on failure (so callers can detect "too large").
  * Options: `asHtml` sends Asana rich text (`html_text`, wrapped in <body>…</body>)
@@ -676,13 +887,17 @@ export async function fetchProjectTasks(
 export async function fetchSprintAsanaData(
   sprintName: string,
   log?: LogFn,
-): Promise<{ projectUrl: string | null; dueByLink: Map<string, string> }> {
+): Promise<{
+  projectUrl: string | null;
+  projectGid: string | null;
+  dueByLink: Map<string, string>;
+}> {
   const project =
     (await findProjectInWorkspace(sprintName, log)) ??
     (await findAsanaProject(sprintName, log));
 
   const dueByLink = new Map<string, string>();
-  if (!project) return { projectUrl: null, dueByLink };
+  if (!project) return { projectUrl: null, projectGid: null, dueByLink };
 
   // Project permalink — prefer Asana's canonical permalink_url; fall back to a
   // constructed URL if the fetch is unavailable (the link is best-effort).
@@ -704,5 +919,5 @@ export async function fetchSprintAsanaData(
   for (const t of tasks) {
     if (t.permalink_url) dueByLink.set(t.permalink_url, t.due_on ?? '');
   }
-  return { projectUrl, dueByLink };
+  return { projectUrl, projectGid: project.gid, dueByLink };
 }

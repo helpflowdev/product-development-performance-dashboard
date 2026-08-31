@@ -1,0 +1,596 @@
+
+// Create SprintPlanning namespace
+var SprintPlanning = SprintPlanning || {};
+/**
+ * Generate enhanced sprint summary
+ */
+SprintPlanning.generateEnhancedSprintSummary = function() {
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const configSheet = spreadsheet.getSheetByName('Config');
+  const dataSheet = spreadsheet.getSheetByName('RAW data format - Sprints');
+  const rawData = dataSheet.getDataRange().getValues();
+
+  // Operator-visible notice cell. Lives ABOVE row 7 so the Asana sender (which
+  // reads from row 7 down) never picks it up. Cleared every run so it can't go
+  // stale — clearing BOTH the text and the styling, since clearContent() alone
+  // would leave a blank-but-formatted (bold/red/yellow) cell behind.
+  const WARNING_CELL = 'B3';
+  configSheet.getRange(WARNING_CELL)
+    .clearContent()
+    .setFontWeight('normal')
+    .setFontColor(null)
+    .setFontSize(10)
+    .setBackground(null)
+    .setWrap(false);
+
+  // Get selected sprint and validate
+  const selectedSprint = configSheet.getRange('B1').getValue().trim();
+  if (!selectedSprint) {
+    SpreadsheetApp.getUi().alert("Please select a sprint from the dropdown.");
+    return;
+  }
+
+  // Remove header row and map column indices
+  const headers = rawData.shift();
+  const columnIndices = {
+    sprint: headers.indexOf('Sprint'),
+    status: headers.indexOf('Status (Incomplete or Complete)'),
+    link: headers.indexOf('Link to Task'),
+    assignee: headers.indexOf('Assignee Name'),
+    hoursEstimate: headers.indexOf('Hours Estimate'),
+    hoursActual: headers.indexOf('Hours Actual'),
+    recurringTask: headers.indexOf('Recurring Task'),
+  };
+
+  // Validate required columns
+  if (Object.values(columnIndices).includes(-1)) {
+    SpreadsheetApp.getUi().alert("One or more required columns are missing in the RAW data.");
+    return;
+  }
+
+  // Sprint Date Start is needed ONLY for next-sprint detection. Looked up
+  // separately (not in the validated set above) so a rename to this column can
+  // never break the core summary — it would only disable the next-sprint list.
+  const dateStartIndex = headers.indexOf('Sprint Date Start');
+
+  // Filter tasks for the selected sprint
+  const tasks = rawData.filter(row => 
+    row[columnIndices.sprint]?.toString().trim() === selectedSprint
+  );
+
+  if (!tasks.length) {
+    SpreadsheetApp.getUi().alert(`No tasks found for sprint: ${selectedSprint}`);
+    return;
+  }
+
+  // Define order of names (source of truth)
+  const nameOrder = [
+    "Krasimir", "Nikolay", "Alex", "Eric", "Artem", "JC",
+    "Karim", "Shierraine", "Marion",
+    "Gio", "Sing"
+  ];
+
+  // Metrics initialization
+  let totalTasks = 0, completedTasks = 0, totalHoursEstimate = 0, totalHoursActual = 0;
+  const completedList = [], transferredList = [];
+  const assigneeMetrics = {};
+  const otherAssignees = new Set(); // Track assignees not in nameOrder
+
+  tasks.forEach(row => {
+    const status = row[columnIndices.status]?.toString().trim();
+    const assigneeFullName = row[columnIndices.assignee]?.toString().trim();
+
+    let assignee = "";
+    let isKnownAssignee = false;
+    
+    if (assigneeFullName) {
+      // Split full name into words, compare against nameOrder
+      const words = assigneeFullName.toLowerCase().trim().split(/\s+/);
+      const match = nameOrder.find(n =>
+        words.includes(n.toLowerCase())
+      );
+      
+      if (match) {
+        assignee = match; // use value from nameOrder
+        isKnownAssignee = true;
+      } else {
+        // Not in nameOrder, use first name or email
+        if (assigneeFullName.includes('@')) {
+          // It's likely an email address
+          assignee = assigneeFullName;
+        } else {
+          // Use the first name or the whole string if can't determine
+          assignee = words.length > 0 ? assigneeFullName.split(/\s+/)[0] : assigneeFullName;
+          // Capitalize first letter
+          assignee = assignee.charAt(0).toUpperCase() + assignee.slice(1).toLowerCase();
+        }
+        // Add to other assignees set
+        otherAssignees.add(assignee);
+      }
+    } else {
+      assignee = "Unknown";
+    }
+
+    const hoursEstimate = parseFloat(row[columnIndices.hoursEstimate]) || 0;
+    const hoursActual = parseFloat(row[columnIndices.hoursActual]) || 0;
+    const isRecurring = row[columnIndices.recurringTask]?.toString().trim();
+
+    // Update total metrics (including recurring tasks)
+    totalTasks++;
+    totalHoursEstimate += hoursEstimate;
+    totalHoursActual += hoursActual;
+
+    // Initialize assignee metrics if not present
+    if (!assigneeMetrics[assignee]) {
+      assigneeMetrics[assignee] = { total: 0, completed: 0, hoursEstimate: 0, hoursActual: 0 };
+    }
+    assigneeMetrics[assignee].total++;
+    assigneeMetrics[assignee].hoursEstimate += hoursEstimate;
+    assigneeMetrics[assignee].hoursActual += hoursActual;
+
+    // Completed vs Transferred logic
+    if (status === 'Complete') {
+      completedTasks++;
+      assigneeMetrics[assignee].completed++;
+      if (!isRecurring) {
+        completedList.push([row[columnIndices.link]]); // Add task URL (non-recurring only)
+      }
+    } else if (!isRecurring) {
+      transferredList.push([row[columnIndices.link]]); // Add task URL (non-recurring only)
+    }
+  });
+
+  // --- Determine the NEXT sprint -------------------------------------------
+  // WHICH sprint is "next" is decided by DATES (unambiguous ordering). The task
+  // list is then pulled by the resolved sprint NAME, so grace-period carryovers
+  // (an old-sprint task completed during the next sprint's calendar dates) are
+  // NOT wrongly included — they still carry the previous sprint's name.
+  let nextSprintName = null;
+  const nextSprintList = [];
+
+  // Retired sprints to ignore everywhere in next-sprint logic. Matched
+  // case-insensitively as a substring of the sprint name, so it does NOT depend
+  // on the "Sprint #" prefix and is unaffected by whitespace quirks in live names.
+  const RETIRED_SPRINT_MARKER = 'augment';
+  const isRetiredSprint = name => name.toLowerCase().includes(RETIRED_SPRINT_MARKER);
+
+  if (dateStartIndex !== -1) {
+    // Map each distinct sprint name to its start date (first occurrence wins).
+    // Retired sprints are skipped here so they can never be chosen as "next".
+    const sprintStartDates = {};
+    rawData.forEach(row => {
+      const name = row[columnIndices.sprint]?.toString().trim();
+      if (!name || sprintStartDates[name]) return;
+      if (isRetiredSprint(name)) return; // skip retired (e.g. "Augment Launch > …")
+      const start = SprintPlanning.parseSprintDate(row[dateStartIndex]);
+      if (start) sprintStartDates[name] = start;
+    });
+
+    const selectedStart = sprintStartDates[selectedSprint];
+    if (selectedStart) {
+      let nextStart = null;
+      Object.keys(sprintStartDates).forEach(name => {
+        const start = sprintStartDates[name];
+        if (start.getTime() > selectedStart.getTime() &&
+            (nextStart === null || start.getTime() < nextStart.getTime())) {
+          nextStart = start;
+          nextSprintName = name;
+        }
+      });
+    }
+
+    // Build the list by the resolved next-sprint NAME.
+    // Includes ALL statuses (Complete + Incomplete); excludes DT/recurring.
+    // (nextSprintName is already guaranteed non-retired by the map above; the
+    //  guard here keeps this loop correct on its own.)
+    if (nextSprintName && !isRetiredSprint(nextSprintName)) {
+      rawData.forEach(row => {
+        if (row[columnIndices.sprint]?.toString().trim() !== nextSprintName) return;
+        if (row[columnIndices.recurringTask]?.toString().trim()) return; // DT excluded
+        nextSprintList.push([row[columnIndices.link]]);
+      });
+    }
+  }
+  // -------------------------------------------------------------------------
+
+  // Write sprint summary
+  const summaryStartRow = 7;
+  configSheet.getRange(summaryStartRow, 1, configSheet.getMaxRows(), 2).clearContent(); // Clear old summary
+  configSheet.getRange(summaryStartRow, 1).setValue('Sprint Summary');
+  configSheet.getRange(summaryStartRow + 1, 1).setValue(`Sprint: ${selectedSprint}`);
+  configSheet.getRange(summaryStartRow + 2, 1).setValue(`Total Tasks: ${completedTasks} (${totalTasks})`);
+  configSheet.getRange(summaryStartRow + 3, 1).setValue(`Completion Rate: ${((completedTasks / totalTasks) * 100).toFixed(2)}%`);
+  configSheet.getRange(summaryStartRow + 4, 1).setValue(`Total Estimated vs Actual Hours: ${totalHoursEstimate.toFixed(2)} / ${totalHoursActual.toFixed(2)}`);
+
+  // Write Completed vs Total Tasks and Actual vs Estimate Hours
+  let rowIndex = summaryStartRow + 5;
+  configSheet.getRange(rowIndex++, 1).setValue('Completed vs Total Task:');
+  
+  // First process the known team members
+  nameOrder.forEach(name => {
+    const metrics = assigneeMetrics[name] || { total: 0, completed: 0 };
+    // Skip team members with no tasks
+    if (metrics.total === 0) return;
+    
+    const completionRate = ((metrics.completed / metrics.total) * 100).toFixed(2);
+    configSheet.getRange(rowIndex++, 1).setValue(`${name}: ${completionRate}% (${metrics.completed}/${metrics.total})`);
+  });
+  
+  // Then process any other assignees
+  otherAssigneesArray_helper(otherAssignees).forEach(name => {
+    const metrics = assigneeMetrics[name];
+    if (!metrics || metrics.total === 0) return;
+    
+    const completionRate = ((metrics.completed / metrics.total) * 100).toFixed(2);
+    configSheet.getRange(rowIndex++, 1).setValue(`${name}: ${completionRate}% (${metrics.completed}/${metrics.total})`);
+  });
+
+  configSheet.getRange(rowIndex++, 1).setValue('Actual vs Estimate Hours:');
+  
+  // First process the known team members
+  nameOrder.forEach(name => {
+    const metrics = assigneeMetrics[name] || { hoursEstimate: 0, hoursActual: 0 };
+    // Skip team members with no hours
+    if (metrics.hoursEstimate === 0 && metrics.hoursActual === 0) return;
+    
+    const roundedActual = Math.ceil(metrics.hoursActual);
+    const roundedEstimate = Math.ceil(metrics.hoursEstimate);
+    configSheet.getRange(rowIndex++, 1).setValue(`${name}: ${roundedActual} (${roundedEstimate})`);
+  });
+  
+  // Then process any other assignees
+  otherAssigneesArray_helper(otherAssignees).forEach(name => {
+    const metrics = assigneeMetrics[name];
+    if (!metrics || (metrics.hoursEstimate === 0 && metrics.hoursActual === 0)) return;
+    
+    const roundedActual = Math.ceil(metrics.hoursActual);
+    const roundedEstimate = Math.ceil(metrics.hoursEstimate);
+    configSheet.getRange(rowIndex++, 1).setValue(`${name}: ${roundedActual} (${roundedEstimate})`);
+  });
+
+  // Write completed and transferred task URLs
+  configSheet.getRange(rowIndex++, 1).setValue('Completed Tasks:');
+  if (completedList.length > 0) {
+    configSheet.getRange(rowIndex, 1, completedList.length, 1).setValues(completedList);
+    rowIndex += completedList.length;
+  }
+  configSheet.getRange(rowIndex++, 1).setValue('Transferred Tasks:');
+  if (transferredList.length > 0) {
+    configSheet.getRange(rowIndex, 1, transferredList.length, 1).setValues(transferredList);
+    rowIndex += transferredList.length; // advance so the next section lands below
+  }
+
+  // Write Next Sprint Tasks (only when a next sprint was found).
+  // When NOT found, surface the operator notice above row 7 instead — and write
+  // no section here, so the Asana sender has nothing extra to mishandle.
+  if (nextSprintName) {
+    configSheet.getRange(rowIndex++, 1).setValue('Next Sprint Tasks:');
+    if (nextSprintList.length > 0) {
+      configSheet.getRange(rowIndex, 1, nextSprintList.length, 1).setValues(nextSprintList);
+      rowIndex += nextSprintList.length;
+    }
+  } else {
+    configSheet.getRange(WARNING_CELL)
+      .setValue('⚠️ Next sprint not found — please sync the next sprint in the raw data, then run the summary again.')
+      .setFontWeight('bold')
+      .setFontColor('#CC0000')
+      .setFontSize(14)
+      .setBackground('#FFF2CC')
+      .setWrap(true);
+  }
+};
+
+/**
+ * Parse a sprint date cell into a Date.
+ * Handles native Date objects (from date-formatted cells) and MM/DD/YYYY strings.
+ * Returns null if it can't be parsed.
+ */
+SprintPlanning.parseSprintDate = function(val) {
+  if (val instanceof Date) return val;
+  if (val === null || val === undefined) return null;
+  const s = val.toString().trim();
+  if (!s) return null;
+
+  const parts = s.split('/');
+  if (parts.length === 3) {
+    const m = parseInt(parts[0], 10);
+    const d = parseInt(parts[1], 10);
+    const y = parseInt(parts[2], 10);
+    if (!isNaN(m) && !isNaN(d) && !isNaN(y)) {
+      return new Date(y, m - 1, d);
+    }
+  }
+  const fallback = new Date(s);
+  return isNaN(fallback.getTime()) ? null : fallback;
+};
+
+/**
+ * Helper: sorted array of the "other assignees" set.
+ * (Kept as a tiny helper so the generate function reads cleanly.)
+ */
+function otherAssigneesArray_helper(set) {
+  return Array.from(set).sort();
+}
+
+/**
+ * Send sprint summary to Asana
+ */
+SprintPlanning.sendSprintSummaryToAsana = function() {
+  var ui = SpreadsheetApp.getUi();
+  var response = ui.alert(
+    "Confirm",
+    "Are you sure you want to send the sprint summary to Asana?",
+    ui.ButtonSet.YES_NO
+  );
+
+  if (response != ui.Button.YES) {
+    return;
+  }
+
+  var spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  var configSheet = spreadsheet.getSheetByName("Config");
+
+  var sprintName = configSheet.getRange("B1").getValue().trim();
+  if (!sprintName) {
+    ui.alert("No sprint selected. Please choose a sprint in the Config sheet.");
+    return;
+  }
+
+  // Initialize variables for different sections
+  var summaryData = [];
+  var completedTasks = [];
+  var transferredTasks = [];
+  var nextSprintTasks = [];
+  var currentSection = "summary";
+
+  // Collect data
+  var row = 7;
+  while (configSheet.getRange(row, 1).getValue()) {
+    var line = configSheet.getRange(row, 1).getValue().trim();
+    
+    if (line === "Completed Tasks:") {
+      currentSection = "completed";
+    } else if (line === "Transferred Tasks:") {
+      currentSection = "transferred";
+    } else if (line === "Next Sprint Tasks:") {
+      currentSection = "nextsprint";
+    } else if (line) {
+      switch(currentSection) {
+        case "summary":
+          summaryData.push(line);
+          break;
+        case "completed":
+          completedTasks.push(line);
+          break;
+        case "transferred":
+          transferredTasks.push(line);
+          break;
+        case "nextsprint":
+          nextSprintTasks.push(line);
+          break;
+      }
+    }
+    row++;
+  }
+
+  // Create task in Asana
+  var asanaToken = PropertiesService.getScriptProperties().getProperty("Asana_Token");
+  var projectId = "514125768649585"; 
+  var taskTitle = "Sprint Summary: " + sprintName;
+
+  var taskPayload = {
+    data: {
+      name: taskTitle,
+      projects: [projectId]
+    }
+  };
+
+  var options = {
+    method: "post",
+    headers: {
+      Authorization: "Bearer " + asanaToken,
+      "Content-Type": "application/json"
+    },
+    payload: JSON.stringify(taskPayload),
+    muteHttpExceptions: true
+  };
+
+  var response = UrlFetchApp.fetch(
+    "https://app.asana.com/api/1.0/tasks",
+    options
+  );
+
+  var jsonResponse = JSON.parse(response.getContentText());
+  if (response.getResponseCode() !== 201) {
+    ui.alert("Error sending to Asana: " + jsonResponse.errors[0].message);
+    return;
+  }
+
+  var taskGid = jsonResponse.data.gid;
+  Logger.log("Created task with GID: " + taskGid);
+
+  // Post summary comment
+  var summaryText = SprintPlanning.formatSummaryText(summaryData);
+  SprintPlanning.postCommentToAsana(taskGid, summaryText);
+  Utilities.sleep(1000);
+
+  // Post completed tasks in chunks
+  if (completedTasks.length > 0) {
+    SprintPlanning.postCompletedTasksInChunks(taskGid, completedTasks);
+    Utilities.sleep(1000);
+  }
+
+  // Post transferred tasks
+  if (transferredTasks.length > 0) {
+    var transferredText = "Transferred Tasks:\n\n" + transferredTasks.map(task => task).join("\n");
+    SprintPlanning.postCommentToAsana(taskGid, transferredText);
+    Utilities.sleep(1000);
+  }
+
+  // Post next sprint tasks (chunked — a freshly synced sprint can be large)
+  if (nextSprintTasks.length > 0) {
+    SprintPlanning.postListInChunks(taskGid, nextSprintTasks, "Next Sprint Tasks");
+  }
+
+  ui.alert("Sprint Summary successfully sent to Asana!");
+};
+
+/**
+ * Format summary text for Asana
+ */
+SprintPlanning.formatSummaryText = function(summaryData) {
+  const formattedText = summaryData.map(line => {
+    if (line.endsWith(':')) {
+      return `\n${line}\n`;
+    }
+    return line;
+  }).join('\n');
+  
+  return formattedText;
+};
+
+/**
+ * Post completed tasks in chunks to Asana.
+ * Thin wrapper kept for backward compatibility — delegates to the generic
+ * postListInChunks so there is a single chunking implementation.
+ */
+SprintPlanning.postCompletedTasksInChunks = function(taskGid, completedTasks) {
+  return SprintPlanning.postListInChunks(taskGid, completedTasks, "Completed Tasks");
+};
+
+/**
+ * Post a labeled list of task URLs to Asana, splitting into byte-bounded chunks.
+ * `label` is the section heading (e.g. "Completed Tasks", "Next Sprint Tasks").
+ */
+SprintPlanning.postListInChunks = function(taskGid, items, label) {
+  const MAX_BYTES = 50000; 
+  let currentChunk = [];
+  let currentSize = 0;
+  let chunkNumber = 1;
+  const chunks = [];
+
+  function getByteLength(str) {
+    return str.split('')
+      .map(char => char.charCodeAt(0) < 128 ? 1 : 2)
+      .reduce((sum, bytes) => sum + bytes, 0);
+  }
+
+  for (const task of items) {
+    const taskWithNewline = task + '\n';
+    const taskSize = getByteLength(taskWithNewline);
+
+    if (currentSize + taskSize > MAX_BYTES && currentChunk.length > 0) {
+      chunks.push(currentChunk);
+      currentChunk = [];
+      currentSize = 0;
+    }
+
+    currentChunk.push(task);
+    currentSize += taskSize;
+  }
+
+  if (currentChunk.length > 0) {
+    chunks.push(currentChunk);
+  }
+
+  const totalChunks = chunks.length;
+  for (const chunk of chunks) {
+    let chunkText = totalChunks === 1 
+      ? `${label}:\n\n` 
+      : `${label} (Part ${chunkNumber} of ${totalChunks}):\n\n`;
+    
+    chunkText += chunk.join('\n');
+    
+    let retryCount = 0;
+    const maxRetries = 3;
+    let success = false;
+
+    while (!success && retryCount < maxRetries) {
+      const result = SprintPlanning.postCommentToAsana(taskGid, chunkText);
+      if (result.success) {
+        success = true;
+      } else if (result.error && result.error.includes("too large")) {
+        const midPoint = Math.floor(chunk.length / 2);
+        const firstHalf = chunk.slice(0, midPoint);
+        const secondHalf = chunk.slice(midPoint);
+        
+        let firstChunkText = `${label} (Part ${chunkNumber} of ${totalChunks + 1}):\n\n` + firstHalf.join('\n');
+        let secondChunkText = `${label} (Part ${chunkNumber + 1} of ${totalChunks + 1}):\n\n` + secondHalf.join('\n');
+        
+        SprintPlanning.postCommentToAsana(taskGid, firstChunkText);
+        Utilities.sleep(1000);
+        SprintPlanning.postCommentToAsana(taskGid, secondChunkText);
+        success = true;
+      } else {
+        retryCount++;
+        if (retryCount < maxRetries) {
+          Utilities.sleep(2000);
+        }
+      }
+    }
+    
+    if (!success) {
+      Logger.log(`Failed to post chunk ${chunkNumber} after ${maxRetries} attempts`);
+    }
+    
+    if (chunkNumber < totalChunks) {
+      Utilities.sleep(1000);
+    }
+    
+    chunkNumber++;
+  }
+};
+
+/**
+ * Post comment to Asana
+ */
+SprintPlanning.postCommentToAsana = function(taskGid, comment) {
+  if (!comment || !comment.trim()) {
+    Logger.log("Empty comment, skipping");
+    return { success: false, error: "Empty comment" };
+  }
+
+  var asanaToken = PropertiesService.getScriptProperties().getProperty("Asana_Token");
+
+  var commentPayload = {
+    data: {
+      text: comment
+    }
+  };
+
+  var options = {
+    method: "post",
+    headers: {
+      Authorization: "Bearer " + asanaToken,
+      "Content-Type": "application/json"
+    },
+    payload: JSON.stringify(commentPayload),
+    muteHttpExceptions: true
+  };
+
+  try {
+    var response = UrlFetchApp.fetch(
+      `https://app.asana.com/api/1.0/tasks/${taskGid}/stories`,
+      options
+    );
+    var responseCode = response.getResponseCode();
+    Logger.log("Comment posted. Response code: " + responseCode);
+    
+    if (responseCode !== 201) {
+      const responseText = response.getContentText();
+      Logger.log("Error response: " + responseText);
+      return { 
+        success: false, 
+        error: responseText,
+        responseCode: responseCode 
+      };
+    }
+    return { success: true };
+  } catch (error) {
+    Logger.log("Error posting comment: " + error.toString());
+    return { 
+      success: false, 
+      error: error.toString() 
+    };
+  }
+};

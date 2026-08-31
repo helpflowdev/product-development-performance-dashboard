@@ -2,7 +2,9 @@ import { ScorecardResponse, ScorecardSendResult } from '@/types/scorecard';
 import { formatHours } from './format';
 import { REPORT_CC_GIDS, REPORT_CC_NAMES } from './report-recipients';
 import {
+  addTaskToProject,
   createAsanaSubtask,
+  findSprintScorecardSubtask,
   findSubtaskByName,
   postCommentToTask,
   postGroupedTaskListInChunks,
@@ -56,6 +58,14 @@ function todayDateOnly(): string {
 export function scorecardTaskTitle(dateMMDDYYYY: string): string {
   return `(ST) 🗒️ Product Development Sprint Scorecard Report (${dateMMDDYYYY})`;
 }
+
+/**
+ * Matches a scorecard report subtask regardless of the date in its title (and of
+ * the "(ST)"/"(WT)" prefix and the emoji, which have both drifted over the years).
+ * Used to qualify the sprint-project lookup so it can only ever reuse a scorecard
+ * subtask — never an unrelated subtask filed under the same parent.
+ */
+const SCORECARD_TITLE_PATTERN = /Product Development .*Scorecard\s+Report/i;
 
 /**
  * Build the scorecard comment body (plain text). Section headings (lines ending
@@ -157,13 +167,36 @@ export async function sendScorecardToAsana(
 
   let commentsPosted = 0;
   try {
-    // Find-or-create: reuse today's dated subtask if it already exists under the
-    // parent (re-running the report the same day won't spawn a duplicate task);
-    // otherwise create it. If the lookup errors we let it throw rather than risk
-    // a duplicate. On reuse we leave the existing assignee/followers untouched and
-    // just append the fresh comment(s).
-    const existing = await findSubtaskByName(parentGid, taskTitle);
+    // Find-or-create, in priority order:
+    //   1. The open scorecard subtask filed under THIS SPRINT'S project, due
+    //      nearest the run date. Project membership is the only reliable key: the
+    //      scorecard is weekly and sprints are biweekly, so each sprint project
+    //      holds two of these subtasks, and picking between them by due-date
+    //      proximity lands on the week the report covers. Titles lag (each week's
+    //      subtask is duplicated from the previous one and inherits its date) and
+    //      "due exactly today" misses whenever a run slips a day — both of which
+    //      used to spawn a parallel subtask instead.
+    //   2. Exact match on today's title — a same-day re-run after the sprint's
+    //      subtask was completed, so it reuses the one this report just made
+    //      rather than stacking up another.
+    //   3. Create a fresh dated subtask, and file it under the sprint project so
+    //      it sits with the hand-made ones and step 1 finds it next time.
+    // A lookup error throws rather than risking a duplicate. On reuse we leave the
+    // subtask exactly as found — title, due date, assignee and followers all
+    // untouched — and only append the fresh comment(s).
+    const sprintProjectGid = sc.sprintProjectGid;
+    const sprintSubtask = sprintProjectGid
+      ? await findSprintScorecardSubtask(parentGid, sprintProjectGid, todayDateOnly(), {
+          namePattern: SCORECARD_TITLE_PATTERN,
+        })
+      : null;
+    const existing = sprintSubtask ?? (await findSubtaskByName(parentGid, taskTitle));
     const reused = existing !== null;
+    const matchedBy: ScorecardSendResult['matchedBy'] = sprintSubtask
+      ? 'sprint-project'
+      : existing
+        ? 'title'
+        : 'created';
     const { gid, permalinkUrl } = existing
       ? existing
       : await createAsanaSubtask(parentGid, taskTitle, {
@@ -171,6 +204,13 @@ export async function sendScorecardToAsana(
           dueOn: todayDateOnly(),
           followers: REPORT_CC_GIDS,
         });
+
+    // Newly created subtasks are filed under the sprint project, both so they sit
+    // with the hand-made ones and so the next run matches them at step 1. A failed
+    // add is not fatal — the comments still land on the right task.
+    if (!existing && sprintProjectGid) await addTaskToProject(gid, sprintProjectGid);
+
+    const matchedTaskName = sprintSubtask ? sprintSubtask.name : taskTitle;
 
     // 1. Scorecard metrics + hours + per-assignee (plain text), pinned to the top.
     const result = await postCommentToTask(
@@ -188,6 +228,8 @@ export async function sendScorecardToAsana(
         taskUrl: permalinkUrl,
         commentsPosted,
         reused,
+        matchedBy,
+        matchedTaskName,
         error: result.error ?? 'Failed to post scorecard comment',
       };
     }
@@ -215,6 +257,8 @@ export async function sendScorecardToAsana(
       taskUrl: permalinkUrl,
       commentsPosted,
       reused,
+      matchedBy,
+      matchedTaskName,
     };
   } catch (error) {
     return {

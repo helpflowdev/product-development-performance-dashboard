@@ -3,8 +3,11 @@ import { formatHours } from './format';
 import { REPORT_CC_GIDS, REPORT_CC_NAMES } from './report-recipients';
 import {
   createAsanaSubtask,
+  findOpenSubtaskDueOn,
+  findSubtaskByName,
   postCommentToTask,
   postGroupedTaskListInChunks,
+  renameTask,
 } from './asana';
 
 /**
@@ -27,6 +30,14 @@ const DEFAULT_SUMMARY_ASSIGNEE_ID = '1166606777056089';
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
+
+/**
+ * Matches a sprint summary subtask whichever sprint it names (and through the
+ * "Augment Launch > " prefix some cycles carried). Qualifies the due-today
+ * lookup so it can only ever reuse a summary subtask — never an unrelated
+ * subtask that happens to be due the same day.
+ */
+const SUMMARY_TITLE_PATTERN = /Sprint\s+Summary/i;
 
 /** Today's date as YYYY-MM-DD in the configured timezone (for Asana due_on). */
 function todayDateOnly(): string {
@@ -112,13 +123,46 @@ export async function sendSprintSummaryToAsana(
 
   let commentsPosted = 0;
   try {
-    // Created as a subtask under "DEV - End of Sprint Summary", assigned to
-    // Shann Bryle Rubido, due today.
-    const { gid, permalinkUrl } = await createAsanaSubtask(parentGid, taskTitle, {
-      assignee,
-      dueOn: todayDateOnly(),
-      followers: REPORT_CC_GIDS,
-    });
+    // Find-or-create under "DEV - End of Sprint Summary" (assigned to Shann Bryle
+    // Rubido, due today when newly created). Previously this always created, which
+    // is why several sprints have two or three summary subtasks — every re-run
+    // spawned another one. Priority order:
+    //   1. Exact title match. Unlike the scorecard's date-keyed title, this title
+    //      is keyed on the sprint id, so it identifies the target precisely no
+    //      matter which day the report is run — the strongest key available here.
+    //   2. An open summary subtask due today. Covers the task having been
+    //      pre-created by duplicating the previous sprint's subtask, which leaves
+    //      the PREVIOUS sprint's id in the title while the due date tracks this
+    //      cycle (the failure mode that dogged the scorecard).
+    //   3. Create a fresh subtask.
+    // A lookup error throws rather than risking a duplicate. On reuse we leave the
+    // existing assignee/followers untouched and just append the fresh comment(s).
+    const byTitle = await findSubtaskByName(parentGid, taskTitle);
+    const dueToday = byTitle
+      ? null
+      : await findOpenSubtaskDueOn(parentGid, todayDateOnly(), {
+          namePattern: SUMMARY_TITLE_PATTERN,
+        });
+    const existing = byTitle ?? dueToday;
+    const reused = existing !== null;
+    const matchedBy = byTitle ? 'title' : dueToday ? 'due-today' : 'created';
+    const { gid, permalinkUrl } = existing
+      ? existing
+      : await createAsanaSubtask(parentGid, taskTitle, {
+          assignee,
+          dueOn: todayDateOnly(),
+          followers: REPORT_CC_GIDS,
+        });
+
+    // A subtask reused via the due-date match still names the sprint it was
+    // duplicated from. Retitle it to this sprint so the parent's list stays
+    // readable and the next run's title match hits. Best-effort: a failed rename
+    // must not sink the report.
+    let renamedFrom: string | undefined;
+    if (dueToday && dueToday.name !== taskTitle) {
+      const renamed = await renameTask(gid, taskTitle);
+      if (renamed) renamedFrom = dueToday.name;
+    }
 
     // 1. Metrics + per-assignee breakdown (plain text), pinned to the top.
     const summaryResult = await postCommentToTask(
@@ -161,6 +205,9 @@ export async function sendSprintSummaryToAsana(
       taskGid: gid,
       taskUrl: permalinkUrl,
       commentsPosted,
+      reused,
+      matchedBy,
+      renamedFrom,
     };
   } catch (error) {
     return {

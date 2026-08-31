@@ -94,5 +94,13 @@ export interface SendToAsanaResult {
   taskGid?: string;
   taskUrl?: string;
   commentsPosted?: number;
+  reused?: boolean; // true when an existing subtask was reused (not created)
+  /**
+   * How the target subtask was resolved: matched this sprint's title, matched the
+   * open subtask due today (pre-created by duplication), or none existed so a
+   * fresh subtask was created.
+   */
+  matchedBy?: 'title' | 'due-today' | 'created';
+  renamedFrom?: string; // previous title, when a reused subtask was retitled
   error?: string;
 }

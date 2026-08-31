@@ -158,12 +158,31 @@ export default function SprintSummaryPage() {
           <Card className="mb-6 border border-emerald-500/50 bg-emerald-500/10">
             <h3 className="font-semibold text-emerald-400 mb-1">Sent to Asana</h3>
             <p className="text-sm text-slate-300">
-              Created task{' '}
+              {sendResult.reused ? 'Updated existing task' : 'Created task'}{' '}
               <span className="text-slate-100">{`Sprint Summary: ${summary.sprintId}`}</span>
               {typeof sendResult.commentsPosted === 'number' && (
                 <> with {sendResult.commentsPosted} comment(s).</>
               )}
+              {sendResult.matchedBy === 'title' && (
+                <span className="text-slate-400">
+                  {' '}
+                  Re-running reuses this sprint&apos;s existing subtask instead of adding a
+                  duplicate.
+                </span>
+              )}
+              {sendResult.matchedBy === 'due-today' && (
+                <span className="text-slate-400">
+                  {' '}
+                  Posted to the open summary subtask already due today rather than creating
+                  a new one.
+                </span>
+              )}
             </p>
+            {sendResult.renamedFrom && (
+              <p className="mt-2 text-xs text-slate-400">
+                Retitled it to this sprint (was &ldquo;{sendResult.renamedFrom}&rdquo;).
+              </p>
+            )}
             {sendResult.taskUrl && (
               <a
                 href={sendResult.taskUrl}

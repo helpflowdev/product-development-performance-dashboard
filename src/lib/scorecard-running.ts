@@ -11,6 +11,8 @@ import { computeRunningCompletion } from './scorecard-engine';
  * both the compute and send-to-asana routes. It sets:
  *   - sprintUrl: the Asana project permalink (searched by sprint name), so the
  *     reports can link the sprint name.
+ *   - sprintProjectGid: that same project's gid, which the send uses to find the
+ *     scorecard subtask belonging to this sprint (see findSprintScorecardSubtask).
  *   - the running / to-date completion (due-based) from each task's due date,
  *     which isn't in the sheet.
  *
@@ -22,8 +24,11 @@ export async function attachAsanaContext(
   allRows: SprintRow[],
 ): Promise<void> {
   try {
-    const { projectUrl, dueByLink } = await fetchSprintAsanaData(scorecard.sprintId);
+    const { projectUrl, projectGid, dueByLink } = await fetchSprintAsanaData(
+      scorecard.sprintId,
+    );
     scorecard.sprintUrl = projectUrl;
+    scorecard.sprintProjectGid = projectGid;
 
     const sprintRows = filterBySprints(allRows, [scorecard.sprintId]);
     const running = computeRunningCompletion(sprintRows, dueByLink);

@@ -178,8 +178,9 @@ export function computeScorecard(
 
   return {
     sprintId,
-    // Asana project link is resolved live and attached by the route (needs I/O).
+    // Asana project link + gid are resolved live and attached by the route (needs I/O).
     sprintUrl: null,
+    sprintProjectGid: null,
     week: resolveWeekLabel(sprintRows),
     dateRange,
     completionRate: teamSummary.completionRate,
