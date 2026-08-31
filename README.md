@@ -41,11 +41,26 @@ ASANA_SCORECARD_ASSIGNEE_ID=<user gid>            # scorecard owner (optional)
 
 # AI narrative / focus summary (optional — features degrade gracefully without it)
 GEMINI_API_KEY=<key>
-# GEMINI_MODEL=<model>                # optional; auto-discovered otherwise
+# GEMINI_MODEL=<model>                # optional; leave unset unless forcing one model
 
 # Misc
 TIMEZONE=America/Los_Angeles          # used for Asana due dates + report headers
 ```
+
+### Gemini model selection
+
+Leave `GEMINI_MODEL` unset in normal operation. The app asks the API which models
+the key can use, prefers known-good free-tier `flash` models, and falls through to
+the next candidate when one returns 429 (quota), 403/404 (no access) or a 5xx —
+up to four attempts. Free-tier quota is per **Google Cloud project**, not per key,
+so issuing a new key in the same project does not reset an exhausted quota.
+
+Set `GEMINI_MODEL` only to force one specific model. That pin is strict: discovery
+and fallback are skipped, so if the pinned model is out of quota the summary fails
+rather than trying another. When a summary does fail, the UI now shows the
+`quotaId`, its limit and the retry delay — a limit of `0` means that model has no
+free-tier allowance at all (pick another), while a non-zero limit means the day's
+requests are genuinely used up (resets at midnight Pacific).
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
