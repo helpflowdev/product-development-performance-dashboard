@@ -89,6 +89,9 @@ export default function BurndownPage() {
             <SelectDropdown
               label="Allotted Points"
               options={[
+                { value: '1100', label: '1100 points' },
+                { value: '1200', label: '1200 points' },
+                { value: '1300', label: '1300 points' },
                 { value: '1400', label: '1400 points' },
                 { value: '1500', label: '1500 points' },
                 { value: '1600', label: '1600 points' },

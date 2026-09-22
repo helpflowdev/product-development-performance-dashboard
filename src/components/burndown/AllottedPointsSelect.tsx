@@ -1,4 +1,6 @@
-const ALLOTTED_POINTS_OPTIONS = [1400, 1500, 1600, 1800, 2000, 2200];
+const ALLOTTED_POINTS_OPTIONS = [
+  1100, 1200, 1300, 1400, 1500, 1600, 1800, 2000, 2200,
+];
 
 interface AllottedPointsSelectProps {
   selectedPoints: number | null;
