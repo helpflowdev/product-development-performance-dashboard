@@ -198,6 +198,13 @@ export default function ScorecardPage() {
                 </span>
               )}
             </p>
+            {sendResult.mentionsFailed && (
+              <p className="mt-2 text-xs text-amber-300">
+                Heads up: Asana stored the comment as plain text, so the cc&apos;d
+                collaborators were named but not @mentioned — they weren&apos;t
+                notified. They are still followers on the subtask.
+              </p>
+            )}
             {sendResult.matchedTaskName && (
               <p className="mt-2 text-xs text-slate-400">
                 Subtask: &ldquo;{sendResult.matchedTaskName}&rdquo;

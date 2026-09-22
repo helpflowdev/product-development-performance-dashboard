@@ -1,9 +1,14 @@
 import { ScorecardResponse, ScorecardSendResult } from '@/types/scorecard';
 import { formatHours } from './format';
-import { REPORT_CC_GIDS, REPORT_CC_NAMES } from './report-recipients';
+import {
+  REPORT_CC_GIDS,
+  REPORT_CC_MENTIONS_HTML,
+  REPORT_CC_NAMES,
+} from './report-recipients';
 import {
   addTaskToProject,
   createAsanaSubtask,
+  escapeHtml,
   findSprintScorecardSubtask,
   findSubtaskByName,
   postCommentToTask,
@@ -68,14 +73,16 @@ export function scorecardTaskTitle(dateMMDDYYYY: string): string {
 const SCORECARD_TITLE_PATTERN = /Product Development .*Scorecard\s+Report/i;
 
 /**
- * Build the scorecard comment body (plain text). Section headings (lines ending
- * in ':') are padded with surrounding blank lines exactly like
+ * Build the scorecard comment body as lines, WITHOUT the trailing cc: line —
+ * that one differs between the plain-text and rich-text renderings (names vs
+ * real @mentions), so each builder appends its own. Section headings (lines
+ * ending in ':') are padded with surrounding blank lines exactly like
  * buildSummaryCommentText; sub-items are indented four spaces.
  */
-export function buildScorecardCommentText(
+function buildScorecardLines(
   sc: ScorecardResponse,
   dateMMDDYYYY: string,
-): string {
+): string[] {
   const lines: string[] = [
     `Sprint Scorecard Report - ${dateMMDDYYYY}`,
     `Sprint: ${sc.sprintId}`,
@@ -155,11 +162,51 @@ export function buildScorecardCommentText(
     lines.push('Summary:', `    ${sc.narrative.trim()}`);
   }
 
-  lines.push(`cc: ${REPORT_CC_NAMES}`);
+  return lines;
+}
 
+/** Apply the heading padding and join the lines into one body. */
+function joinScorecardLines(lines: string[]): string {
   return lines
     .map((line) => (line.endsWith(':') ? `\n${line}\n` : line))
     .join('\n');
+}
+
+/**
+ * The scorecard comment as plain text, cc'd by name. Kept for callers that want
+ * the body without markup; the Asana post uses the rich-text builder below, so
+ * that the cc actually notifies.
+ */
+export function buildScorecardCommentText(
+  sc: ScorecardResponse,
+  dateMMDDYYYY: string,
+): string {
+  const lines = buildScorecardLines(sc, dateMMDDYYYY);
+  lines.push(`cc: ${REPORT_CC_NAMES}`);
+  return joinScorecardLines(lines);
+}
+
+/**
+ * The scorecard comment as Asana rich text (`html_text`), cc'd by @mention so
+ * the collaborators are actually notified rather than merely named.
+ *
+ * The layout is unchanged from the plain-text version: every content line is
+ * HTML-escaped and separated by RAW NEWLINES — `<br/>` is deliberately not used,
+ * because it trips Asana's story parser into storing the whole body as literal
+ * text, which would also kill the mentions. Bare URLs are wrapped in anchors,
+ * since a raw URL only auto-links in the plain `text` field.
+ */
+export function buildScorecardCommentHtml(
+  sc: ScorecardResponse,
+  dateMMDDYYYY: string,
+): string {
+  const body = joinScorecardLines(
+    buildScorecardLines(sc, dateMMDDYYYY).map((line) =>
+      escapeHtml(line).replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1">$1</a>'),
+    ),
+  );
+  // Appended after escaping — the mention elements are markup, not text.
+  return `<body>${body}\ncc: ${REPORT_CC_MENTIONS_HTML}</body>`;
 }
 
 export async function sendScorecardToAsana(
@@ -218,11 +265,13 @@ export async function sendScorecardToAsana(
 
     const matchedTaskName = sprintSubtask ? sprintSubtask.name : taskTitle;
 
-    // 1. Scorecard metrics + hours + per-assignee (plain text), pinned to the top.
+    // 1. Scorecard metrics + hours + per-assignee, pinned to the top. Posted as
+    //    rich text so the trailing cc: line carries real @mentions — a plain-text
+    //    cc names the collaborators without notifying any of them.
     const result = await postCommentToTask(
       gid,
-      buildScorecardCommentText(sc, dateMMDDYYYY),
-      { pinned: true },
+      buildScorecardCommentHtml(sc, dateMMDDYYYY),
+      { asHtml: true, pinned: true },
     );
     if (result.success) commentsPosted++;
 
@@ -265,6 +314,8 @@ export async function sendScorecardToAsana(
       reused,
       matchedBy,
       matchedTaskName,
+      // Comment landed, but as literal text — so the cc mentions did NOT notify.
+      mentionsFailed: result.htmlFallback === true,
     };
   } catch (error) {
     return {

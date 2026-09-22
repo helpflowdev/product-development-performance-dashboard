@@ -101,5 +101,12 @@ export interface ScorecardSendResult {
    */
   matchedBy?: 'sprint-project' | 'title' | 'created';
   matchedTaskName?: string; // title of the subtask the comments were posted to
+  /**
+   * The scorecard comment posted, but Asana stored it as literal text instead of
+   * rich text — so the cc'd collaborators were named without being @mentioned,
+   * and none of them got a notification. Worth telling the operator: the numbers
+   * are in Asana, the people weren't pinged.
+   */
+  mentionsFailed?: boolean;
   error?: string;
 }

@@ -322,6 +322,13 @@ export async function fetchTaskAddedToProjectDate(
 export interface PostCommentResult {
   success: boolean;
   error?: string;
+  /**
+   * Set on an `asHtml` post when Asana silently stored the body as PLAIN TEXT
+   * instead of rich text. Asana returns 201 either way, but a fallback means the
+   * comment renders with its raw tags visible and — the reason we check — any
+   * @mentions in it never fire a notification. See postCommentToTask.
+   */
+  htmlFallback?: boolean;
 }
 
 /**
@@ -682,6 +689,18 @@ export async function postCommentToTask(
     if (response.status !== 201) {
       return { success: false, error: await response.text() };
     }
+
+    // Asana's story parser can silently fall back to text storage on a body it
+    // dislikes — still a 201, but the tags render literally and mentions don't
+    // notify. The tell is in the response: stored as html, `text` is the
+    // tag-stripped rendition; on fallback it echoes the raw HTML back.
+    if (opts.asHtml) {
+      const stored = await response.json().catch(() => null);
+      const storedText = stored?.data?.text;
+      if (typeof storedText === 'string' && storedText.includes('<body')) {
+        return { success: true, htmlFallback: true };
+      }
+    }
     return { success: true };
   } catch (error) {
     return { success: false, error: String(error) };
@@ -700,7 +719,7 @@ function getByteLength(str: string): number {
   return bytes;
 }
 
-function escapeHtml(s: string): string {
+export function escapeHtml(s: string): string {
   return s
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
