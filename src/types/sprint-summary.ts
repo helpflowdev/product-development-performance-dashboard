@@ -102,5 +102,12 @@ export interface SendToAsanaResult {
    */
   matchedBy?: 'title' | 'due-today' | 'created';
   renamedFrom?: string; // previous title, when a reused subtask was retitled
+  /**
+   * The summary comment posted, but Asana stored it as literal text instead of
+   * rich text — so the cc'd collaborators were named without being @mentioned,
+   * and none of them got a notification. Worth telling the operator: the numbers
+   * are in Asana, the people weren't pinged.
+   */
+  mentionsFailed?: boolean;
   error?: string;
 }

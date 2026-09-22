@@ -2,6 +2,10 @@ import { SprintSummaryResponse, SendToAsanaResult } from '@/types/sprint-summary
 import { formatHours } from './format';
 import { REPORT_CC_GIDS, REPORT_CC_NAMES } from './report-recipients';
 import {
+  buildReportCommentHtml,
+  joinReportLines,
+} from './report-comment';
+import {
   createAsanaSubtask,
   findOpenSubtaskDueOn,
   findSubtaskByName,
@@ -15,9 +19,10 @@ import {
  *
  * Creates a `Sprint Summary: <name>` SUBTASK under the standing parent task
  * "DEV - End of Sprint Summary" (so every sprint's summary collects under one
- * parent), posts the metrics + per-assignee breakdown as a plain-text comment,
- * then posts the Completed / Carried-Over / Incomplete / Next-Sprint lists as
- * rich-text comments with hyperlinked titles grouped per assignee.
+ * parent), posts the metrics + per-assignee breakdown as a rich-text comment
+ * (rich so its cc: line can @mention the collaborators), then posts the
+ * Completed / Carried-Over / Incomplete / Next-Sprint lists as rich-text
+ * comments with hyperlinked titles grouped per assignee.
  */
 
 /** Standing parent task the summary subtask is created under ("DEV - End of Sprint Summary"). */
@@ -52,10 +57,12 @@ function todayDateOnly(): string {
 }
 
 /**
- * Build the metrics + per-assignee summary comment (plain text). Heading lines
- * (those ending in ':') are padded with surrounding blank lines for readability.
+ * Build the metrics + per-assignee summary body as lines, WITHOUT the trailing
+ * cc: line — that differs between the plain-text and rich-text renderings (names
+ * vs real @mentions), so each builder appends its own. Heading lines (those
+ * ending in ':') are padded with surrounding blank lines for readability.
  */
-export function buildSummaryCommentText(summary: SprintSummaryResponse): string {
+function buildSummaryLines(summary: SprintSummaryResponse): string[] {
   const lines: string[] = [
     'Sprint Summary',
     `Sprint: ${summary.sprintId}`,
@@ -105,11 +112,27 @@ export function buildSummaryCommentText(summary: SprintSummaryResponse): string 
     );
   }
 
-  lines.push(`cc: ${REPORT_CC_NAMES}`);
+  return lines;
+}
 
-  return lines
-    .map((line) => (line.endsWith(':') ? `\n${line}\n` : line))
-    .join('\n');
+/**
+ * The summary comment as plain text, cc'd by name. Kept for callers that want
+ * the body without markup; the Asana post uses the rich-text builder below, so
+ * that the cc actually notifies.
+ */
+export function buildSummaryCommentText(summary: SprintSummaryResponse): string {
+  const lines = buildSummaryLines(summary);
+  lines.push(`cc: ${REPORT_CC_NAMES}`);
+  return joinReportLines(lines);
+}
+
+/**
+ * The summary comment as Asana rich text (`html_text`), cc'd by @mention so the
+ * collaborators are actually notified rather than merely named. Shaping (and the
+ * reasons behind it) lives in report-comment.ts.
+ */
+export function buildSummaryCommentHtml(summary: SprintSummaryResponse): string {
+  return buildReportCommentHtml(buildSummaryLines(summary));
 }
 
 export async function sendSprintSummaryToAsana(
@@ -164,11 +187,13 @@ export async function sendSprintSummaryToAsana(
       if (renamed) renamedFrom = dueToday.name;
     }
 
-    // 1. Metrics + per-assignee breakdown (plain text), pinned to the top.
+    // 1. Metrics + per-assignee breakdown, pinned to the top. Posted as rich
+    //    text so the trailing cc: line carries real @mentions — a plain-text cc
+    //    names the collaborators without notifying any of them.
     const summaryResult = await postCommentToTask(
       gid,
-      buildSummaryCommentText(summary),
-      { pinned: true },
+      buildSummaryCommentHtml(summary),
+      { asHtml: true, pinned: true },
     );
     if (summaryResult.success) commentsPosted++;
     await sleep(1000);
@@ -208,6 +233,8 @@ export async function sendSprintSummaryToAsana(
       reused,
       matchedBy,
       renamedFrom,
+      // Comment landed, but as literal text — so the cc mentions did NOT notify.
+      mentionsFailed: summaryResult.htmlFallback === true,
     };
   } catch (error) {
     return {

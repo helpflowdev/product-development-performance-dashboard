@@ -178,6 +178,13 @@ export default function SprintSummaryPage() {
                 </span>
               )}
             </p>
+            {sendResult.mentionsFailed && (
+              <p className="mt-2 text-xs text-amber-300">
+                Heads up: Asana stored the comment as plain text, so the cc&apos;d
+                collaborators were named but not @mentioned — they weren&apos;t
+                notified. They are still followers on the subtask.
+              </p>
+            )}
             {sendResult.renamedFrom && (
               <p className="mt-2 text-xs text-slate-400">
                 Retitled it to this sprint (was &ldquo;{sendResult.renamedFrom}&rdquo;).

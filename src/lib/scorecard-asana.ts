@@ -1,14 +1,13 @@
 import { ScorecardResponse, ScorecardSendResult } from '@/types/scorecard';
 import { formatHours } from './format';
+import { REPORT_CC_GIDS, REPORT_CC_NAMES } from './report-recipients';
 import {
-  REPORT_CC_GIDS,
-  REPORT_CC_MENTIONS_HTML,
-  REPORT_CC_NAMES,
-} from './report-recipients';
+  buildReportCommentHtml,
+  joinReportLines,
+} from './report-comment';
 import {
   addTaskToProject,
   createAsanaSubtask,
-  escapeHtml,
   findSprintScorecardSubtask,
   findSubtaskByName,
   postCommentToTask,
@@ -165,13 +164,6 @@ function buildScorecardLines(
   return lines;
 }
 
-/** Apply the heading padding and join the lines into one body. */
-function joinScorecardLines(lines: string[]): string {
-  return lines
-    .map((line) => (line.endsWith(':') ? `\n${line}\n` : line))
-    .join('\n');
-}
-
 /**
  * The scorecard comment as plain text, cc'd by name. Kept for callers that want
  * the body without markup; the Asana post uses the rich-text builder below, so
@@ -183,30 +175,19 @@ export function buildScorecardCommentText(
 ): string {
   const lines = buildScorecardLines(sc, dateMMDDYYYY);
   lines.push(`cc: ${REPORT_CC_NAMES}`);
-  return joinScorecardLines(lines);
+  return joinReportLines(lines);
 }
 
 /**
  * The scorecard comment as Asana rich text (`html_text`), cc'd by @mention so
- * the collaborators are actually notified rather than merely named.
- *
- * The layout is unchanged from the plain-text version: every content line is
- * HTML-escaped and separated by RAW NEWLINES — `<br/>` is deliberately not used,
- * because it trips Asana's story parser into storing the whole body as literal
- * text, which would also kill the mentions. Bare URLs are wrapped in anchors,
- * since a raw URL only auto-links in the plain `text` field.
+ * the collaborators are actually notified rather than merely named. Shaping (and
+ * the reasons behind it) lives in report-comment.ts.
  */
 export function buildScorecardCommentHtml(
   sc: ScorecardResponse,
   dateMMDDYYYY: string,
 ): string {
-  const body = joinScorecardLines(
-    buildScorecardLines(sc, dateMMDDYYYY).map((line) =>
-      escapeHtml(line).replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1">$1</a>'),
-    ),
-  );
-  // Appended after escaping — the mention elements are markup, not text.
-  return `<body>${body}\ncc: ${REPORT_CC_MENTIONS_HTML}</body>`;
+  return buildReportCommentHtml(buildScorecardLines(sc, dateMMDDYYYY));
 }
 
 export async function sendScorecardToAsana(
