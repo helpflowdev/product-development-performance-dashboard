@@ -158,6 +158,16 @@ export function ScorecardView({ scorecard: sc }: ScorecardViewProps) {
             {sc.dateRange}
           </span>
         </div>
+
+        {/* Scope — only shown when the report was narrowed to specific people, so
+            a filtered card is never mistaken for the whole team's. */}
+        {sc.assigneeNames.length > 0 && (
+          <p className="mt-2 text-xs text-amber-300">
+            Scoped to {sc.assigneeNames.length} assignee(s):{' '}
+            <span className="text-slate-300">{sc.assigneeNames.join(', ')}</span> —
+            every metric below counts only their tasks.
+          </p>
+        )}
       </Card>
 
       {/* Completion rate tiles */}

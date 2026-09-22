@@ -17,6 +17,14 @@ import { AssigneeSummary, AssigneeTaskGroup } from './sprint-summary';
 
 export interface ScorecardResponse {
   sprintId: string; // the sprint the scorecard reports on (default: latest completed)
+  /**
+   * Assignees the report was scoped to, as picked in the generate dialog.
+   * Empty = the whole team (no filter) — the default and the historical
+   * behaviour. When non-empty EVERY number on this scorecard (completion, QTD,
+   * burndown, hours, spillover, task lists) counts only these people's tasks,
+   * so the view and the Asana comment both say so.
+   */
+  assigneeNames: string[];
   sprintUrl: string | null; // Asana project permalink for the sprint (searched live); null if not found
   sprintProjectGid: string | null; // gid of that same project — the key the send uses to find this sprint's scorecard subtask
   week: string; // the sprint's Week label, e.g. "WE192026" (most common in its rows; '' if none)
@@ -72,6 +80,7 @@ export interface ScorecardResponse {
 
 export interface ScorecardInput {
   sprintId?: string; // default: most recent completed sprint
+  assigneeNames?: string[]; // default/empty: every assignee in the sprint
   allottedStoryPoints: number;
   uptimeNote?: string;
   completionGoal?: number; // default 95

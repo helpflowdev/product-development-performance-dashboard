@@ -85,6 +85,12 @@ export function buildScorecardCommentText(
   if (sc.sprintUrl) lines.push(`Sprint Link: ${sc.sprintUrl}`);
   if (sc.week) lines.push(`Week: ${sc.week}`);
 
+  // Only stated when the operator narrowed the report — an unqualified scorecard
+  // is the whole team, and a partial one must never read as if it were.
+  if (sc.assigneeNames.length > 0) {
+    lines.push(`Scope: ${sc.assigneeNames.join(', ')} (partial team)`);
+  }
+
   lines.push(
     `Date Range: ${sc.dateRange}`,
     'Completion Rate:',

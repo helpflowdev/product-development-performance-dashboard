@@ -6,6 +6,7 @@ import {
   computeQtdCompletionRate,
   filterBySprints,
   filterByRoles,
+  filterByAssignees,
 } from './completion-rate-engine';
 import { computeSprintSummary } from './sprint-summary-engine';
 import { isDevMember } from './dev-members';
@@ -138,14 +139,49 @@ export function computeRunningCompletion(
   };
 }
 
+/**
+ * Clean up the operator's assignee picks: trim, drop blanks, de-duplicate,
+ * preserve the picked order. An empty result means "no filter" — the whole team,
+ * which is the default and what every scorecard before this option reported on.
+ */
+export function normalizeAssigneeNames(names?: string[] | null): string[] {
+  if (!Array.isArray(names)) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of names) {
+    if (typeof raw !== 'string') continue;
+    const name = raw.trim();
+    if (!name || seen.has(name)) continue;
+    seen.add(name);
+    out.push(name);
+  }
+  return out;
+}
+
 export function computeScorecard(
   allRows: SprintRow[],
   input: ScorecardInput,
 ): ScorecardResponse {
+  // Resolve the sprint against the UNFILTERED rows: which sprint the scorecard
+  // reports on is the operator's pick (or the latest completed sprint), and must
+  // not shift just because the selected assignees happen to have no tasks in it.
   const sprintId = resolveSprintId(allRows, input.sprintId);
-  const sprintRows = filterBySprints(allRows, [sprintId]);
+
+  // Scope every downstream engine to the selected assignees by filtering the row
+  // universe once, here. Filtering `allRows` (not just this sprint's rows) keeps
+  // the cross-sprint reads consistent with the headline: burndown's carry-over
+  // exclusion, the QTD trend, and the Sprint Summary's "carried over" detection
+  // all then look at the same people. Empty selection = no filter.
+  const assigneeNames = normalizeAssigneeNames(input.assigneeNames);
+  const scopedRows = filterByAssignees(allRows, assigneeNames);
+
+  const sprintRows = filterBySprints(scopedRows, [sprintId]);
   if (sprintRows.length === 0) {
-    throw new Error(`No tasks found for sprint: ${sprintId}`);
+    throw new Error(
+      assigneeNames.length > 0
+        ? `No tasks found for sprint ${sprintId} for the selected assignee(s): ${assigneeNames.join(', ')}`
+        : `No tasks found for sprint: ${sprintId}`,
+    );
   }
 
   // Whole-team completion (this sprint) — computeSummary is the shared source of
@@ -164,20 +200,21 @@ export function computeScorecard(
 
   // Burndown / story points — pass allRows as the 3rd arg so cross-sprint
   // carry-over is excluded exactly as on the /burndown page.
-  const burndown = computeBurndown(sprintRows, input.allottedStoryPoints, allRows);
+  const burndown = computeBurndown(sprintRows, input.allottedStoryPoints, scopedRows);
   const burndownRate = parseFloat(burndown.burndownRate); // "86.94%" → 86.94
 
   // Hours, per-assignee breakdown, spillover, and task-level links come from the
   // Sprint Summary engine over the SAME sprint — so the weekly ties out to the
   // Sprint Summary report task-for-task (and carries the sprint-aware "completed
   // = Complete AND not carried over" definition for those fields).
-  const summary = computeSprintSummary(allRows, sprintId);
+  const summary = computeSprintSummary(scopedRows, sprintId);
 
   const first = sprintRows[0];
   const dateRange = `${first.sprintDateStart} – ${first.sprintDateEnd}`;
 
   return {
     sprintId,
+    assigneeNames,
     // Asana project link + gid are resolved live and attached by the route (needs I/O).
     sprintUrl: null,
     sprintProjectGid: null,
@@ -185,7 +222,7 @@ export function computeScorecard(
     dateRange,
     completionRate: teamSummary.completionRate,
     completionGoal: input.completionGoal ?? DEFAULT_COMPLETION_GOAL,
-    qtdCompletionRate: computeQtdCompletionRate(allRows, sprintId),
+    qtdCompletionRate: computeQtdCompletionRate(scopedRows, sprintId),
     totalTasks: teamSummary.totalTasks,
     totalCompleted: teamSummary.totalCompleted,
     // Running/to-date completion needs live Asana due dates — the route fetches

@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { fetchSheetRows } from '@/lib/sheets';
 import { mapRowsToSprintRows } from '@/lib/row-mapper';
-import { backfillDerivedColumns } from '@/lib/completion-rate-engine';
-import { computeScorecard } from '@/lib/scorecard-engine';
+import { backfillDerivedColumns, filterByAssignees } from '@/lib/completion-rate-engine';
+import { computeScorecard, normalizeAssigneeNames } from '@/lib/scorecard-engine';
 import { attachAsanaContext } from '@/lib/scorecard-running';
 import { generateScorecardNarrative } from '@/lib/sprint-focus-summary';
 import { ScorecardInput } from '@/types/scorecard';
@@ -12,10 +12,11 @@ export const maxDuration = 60;
 
 /**
  * POST /api/scorecard
- * Request body: { allottedStoryPoints: number, sprintId?, uptimeNote?, completionGoal? }
+ * Request body: { allottedStoryPoints: number, sprintId?, assigneeNames?, uptimeNote?, completionGoal? }
  *
  * Computes the Weekly Scorecard for the selected sprint (default: latest
- * completed) and attaches the analytical narrative (Gemini, never throws).
+ * completed), scoped to the selected assignees (default/empty: the whole team),
+ * and attaches the analytical narrative (Gemini, never throws).
  */
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
@@ -31,6 +32,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
+    if (body.assigneeNames !== undefined && !Array.isArray(body.assigneeNames)) {
+      return NextResponse.json(
+        { error: 'assigneeNames must be an array of names' },
+        { status: 400 },
+      );
+    }
+    const assigneeNames = normalizeAssigneeNames(body.assigneeNames);
+
     const rawRows = await fetchSheetRows();
     // Backfill the Role column the replace-per-sprint sync leaves blank so the
     // devs-vs-team split matches the Individual CR page.
@@ -42,13 +51,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     const scorecard = computeScorecard(sprintRows, {
       sprintId: body.sprintId?.trim() || undefined,
+      assigneeNames,
       allottedStoryPoints: body.allottedStoryPoints,
       uptimeNote: body.uptimeNote,
       completionGoal: body.completionGoal,
     });
 
     // Sprint link + running/to-date completion from live Asana (never throws).
-    await attachAsanaContext(scorecard, sprintRows);
+    // Hand it the same assignee-scoped rows the engine used, so the running rate
+    // counts the selected people only — like every other number on the card.
+    await attachAsanaContext(scorecard, filterByAssignees(sprintRows, assigneeNames));
 
     // Analytical narrative from the computed numbers. Never throws — surfaces a
     // reason in narrativeError when generation fails so it isn't silent.

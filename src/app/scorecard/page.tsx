@@ -72,6 +72,8 @@ export default function ScorecardPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           sprintId: scorecard.sprintId,
+          // Same assignee scope the operator generated and reviewed under.
+          assigneeNames: scorecard.assigneeNames,
           allottedStoryPoints: scorecard.allottedStoryPoints,
           completionGoal: scorecard.completionGoal,
           uptimeNote: uptimeText.trim(),
