@@ -34,6 +34,25 @@ export function parseDate(dateStr: string | null | undefined): Date | null {
 }
 
 /**
+ * Today's date in the configured timezone, as a midnight Date like parseDate
+ * returns. Plain `new Date()` would use the server's clock, and the server
+ * runs in UTC — already the next day for the team every evening.
+ */
+export function todayInTimezone(): Date {
+  const tz = process.env.TIMEZONE ?? 'America/Los_Angeles';
+  const [year, month, day] = new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  })
+    .format(new Date())
+    .split('-')
+    .map(Number);
+  return new Date(year, month - 1, day, 0, 0, 0, 0);
+}
+
+/**
  * Convert Date to YYYY-MM-DD string
  */
 export function toDateString(date: Date): string {

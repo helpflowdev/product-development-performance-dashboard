@@ -7,6 +7,7 @@ import {
   daysBetween,
   isDateBefore,
   isDateAfter,
+  todayInTimezone,
 } from './date-utils';
 
 /**
@@ -220,8 +221,7 @@ export function computeBurndown(
   // Calculate date range
   // Display range: always show full sprint (start to end)
   // Completion cutoff: only count completed work up to today
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const today = todayInTimezone();
   const rangeEnd = endDate; // Always show full sprint range
   const completionCutoff = today; // But only count completions up to today
 
