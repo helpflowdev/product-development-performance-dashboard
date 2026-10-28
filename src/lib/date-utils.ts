@@ -39,7 +39,7 @@ export function parseDate(dateStr: string | null | undefined): Date | null {
  * runs in UTC — already the next day for the team every evening.
  */
 export function todayInTimezone(): Date {
-  const tz = process.env.TIMEZONE ?? 'America/Los_Angeles';
+  const tz = process.env.TIMEZONE ?? 'Etc/GMT+8';
   const [year, month, day] = new Intl.DateTimeFormat('en-CA', {
     timeZone: tz,
     year: 'numeric',

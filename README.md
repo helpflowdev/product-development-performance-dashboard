@@ -44,7 +44,7 @@ GEMINI_API_KEY=<key>
 # GEMINI_MODEL=<model>                # optional; leave unset unless forcing one model
 
 # Misc
-TIMEZONE=America/Los_Angeles          # used for Asana due dates + report headers
+TIMEZONE=Etc/GMT+8                   # PST (UTC-8, no DST; the sign is inverted in Etc/ names) — Asana dates, report headers, burndown 'today'
 ```
 
 ### Gemini model selection

@@ -17,11 +17,11 @@ function sleep(ms: number): Promise<void> {
 }
 
 /**
- * Format a JS Date to MM/DD/YYYY in the configured timezone (America/Los_Angeles)
+ * Format a JS Date to MM/DD/YYYY in the configured timezone (default Etc/GMT+8 = PST, UTC-8 all year)
  * Matches GAS: Utilities.formatDate(date, Session.getScriptTimeZone(), "MM/dd/yyyy")
  */
 function formatDateInTimezone(date: Date): string {
-  const tz = process.env.TIMEZONE ?? 'America/Los_Angeles';
+  const tz = process.env.TIMEZONE ?? 'Etc/GMT+8';
   const parts = new Intl.DateTimeFormat('en-US', {
     timeZone: tz,
     year: 'numeric',

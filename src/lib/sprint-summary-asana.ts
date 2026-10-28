@@ -46,7 +46,7 @@ const SUMMARY_TITLE_PATTERN = /Sprint\s+Summary/i;
 
 /** Today's date as YYYY-MM-DD in the configured timezone (for Asana due_on). */
 function todayDateOnly(): string {
-  const tz = process.env.TIMEZONE ?? 'America/Los_Angeles';
+  const tz = process.env.TIMEZONE ?? 'Etc/GMT+8';
   // en-CA formats as YYYY-MM-DD, which is exactly Asana's due_on format.
   return new Intl.DateTimeFormat('en-CA', {
     timeZone: tz,

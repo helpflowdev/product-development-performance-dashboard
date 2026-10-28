@@ -56,7 +56,7 @@ function resolveWeekLabel(rows: SprintRow[]): string {
 
 /** Today's date as YYYY-MM-DD in the configured timezone. */
 function todayDateString(): string {
-  const tz = process.env.TIMEZONE ?? 'America/Los_Angeles';
+  const tz = process.env.TIMEZONE ?? 'Etc/GMT+8';
   return new Intl.DateTimeFormat('en-CA', {
     timeZone: tz,
     year: 'numeric',

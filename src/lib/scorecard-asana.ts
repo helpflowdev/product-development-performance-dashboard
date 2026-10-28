@@ -34,7 +34,7 @@ const DEFAULT_SCORECARD_PARENT_TASK_ID = '1207376779108203';
 
 /** Today's date as MM/DD/YYYY in the configured timezone (for the title + header). */
 function todayMMDDYYYY(): string {
-  const tz = process.env.TIMEZONE ?? 'America/Los_Angeles';
+  const tz = process.env.TIMEZONE ?? 'Etc/GMT+8';
   const parts = new Intl.DateTimeFormat('en-US', {
     timeZone: tz,
     year: 'numeric',
@@ -49,7 +49,7 @@ function todayMMDDYYYY(): string {
 
 /** Today's date as YYYY-MM-DD in the configured timezone (for Asana due_on). */
 function todayDateOnly(): string {
-  const tz = process.env.TIMEZONE ?? 'America/Los_Angeles';
+  const tz = process.env.TIMEZONE ?? 'Etc/GMT+8';
   return new Intl.DateTimeFormat('en-CA', {
     timeZone: tz,
     year: 'numeric',
