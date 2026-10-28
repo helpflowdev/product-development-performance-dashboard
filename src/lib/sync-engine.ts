@@ -328,7 +328,14 @@ export async function syncSprintData(
 
     return result;
   } catch (error) {
-    result.error = String(error);
+    // error.message, not String(error), so the log doesn't read "Error: Error: ...".
+    const message = error instanceof Error ? error.message : String(error);
+    // invalid_grant = Google rejected the service-account credentials themselves
+    // (key deleted/expired/disabled, or the key doesn't belong to the email), so
+    // retrying won't help — say what actually needs fixing.
+    result.error = message.includes('invalid_grant')
+      ? `${message} Google rejected the service-account key — create a new JSON key for GOOGLE_SERVICE_ACCOUNT_EMAIL and update GOOGLE_PRIVATE_KEY in Vercel.`
+      : message;
     result.durationMs = Date.now() - startTime;
     log(`Error: ${result.error}`);
     return result;

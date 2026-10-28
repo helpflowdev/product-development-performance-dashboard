@@ -164,9 +164,10 @@ export async function batchUpdateColumnX(
 }
 
 /**
- * Get the numeric sheet tab ID needed for structural operations (insert/delete rows).
+ * Get the numeric sheet tab ID needed for structural operations (insert/delete
+ * rows), plus the tab's current grid row count.
  */
-export async function getSheetTabId(): Promise<number> {
+export async function getSheetTab(): Promise<{ sheetId: number; rowCount: number }> {
   const sheets = getWriteClient();
   const response = await sheets.spreadsheets.get({
     spreadsheetId: process.env.GOOGLE_SHEET_ID!,
@@ -181,7 +182,10 @@ export async function getSheetTabId(): Promise<number> {
     throw new Error(`Sheet tab "${SHEET_NAME}" not found`);
   }
 
-  return tab.properties.sheetId;
+  return {
+    sheetId: tab.properties.sheetId,
+    rowCount: tab.properties.gridProperties?.rowCount ?? 0,
+  };
 }
 
 /**
@@ -195,7 +199,7 @@ export async function insertSheetRows(
   if (values.length === 0) return;
 
   const sheets = getWriteClient();
-  const sheetId = await getSheetTabId();
+  const { sheetId, rowCount } = await getSheetTab();
 
   // Insert empty rows after the specified row
   await sheets.spreadsheets.batchUpdate({
@@ -210,7 +214,11 @@ export async function insertSheetRows(
               startIndex: afterRow, // 0-based: afterRow (1-based) maps to index afterRow
               endIndex: afterRow + values.length,
             },
-            inheritFromBefore: false,
+            // Normally inherit from the row below. When the sprint was the last
+            // block on the sheet, its rows were deleted off the end of the grid, so
+            // startIndex == rowCount and there is no row below — the API rejects
+            // that unless we inherit from the row above instead.
+            inheritFromBefore: afterRow >= rowCount,
           },
         },
       ],
@@ -262,7 +270,7 @@ export async function appendSheetRows(values: string[][]): Promise<void> {
 export async function deleteSheetRows(rowNumbers: number[]): Promise<number> {
   if (rowNumbers.length === 0) return 0;
 
-  const sheetId = await getSheetTabId();
+  const { sheetId } = await getSheetTab();
 
   // Ascending + de-duped, so consecutive runs are adjacent and mergeable.
   const sorted = [...new Set(rowNumbers)].sort((a, b) => a - b);
