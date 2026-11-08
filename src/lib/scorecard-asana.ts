@@ -115,7 +115,7 @@ function buildScorecardLines(
   // Said outright so a task count lower than Asana shows isn't a mystery.
   if (sc.midSprintCount > 0) {
     lines.push(
-      `    Mid-Sprint Additions (not counted): ${sc.midSprintCount} (${sc.midSprintCompletedCount} complete)`,
+      `    Mid-Sprint Additions (not counted in tasks or rates): ${sc.midSprintCount} (${sc.midSprintCompletedCount} complete)`,
     );
   }
 

@@ -5,6 +5,7 @@ import { backfillDerivedColumns, filterByAssignees } from '@/lib/completion-rate
 import { computeScorecard, normalizeAssigneeNames } from '@/lib/scorecard-engine';
 import { attachAsanaContext } from '@/lib/scorecard-running';
 import { generateScorecardNarrative } from '@/lib/sprint-focus-summary';
+import { withMidSprintNote } from '@/lib/mid-sprint';
 import { ScorecardInput } from '@/types/scorecard';
 
 export const runtime = 'nodejs';
@@ -79,7 +80,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       midSprintCount: scorecard.midSprintCount,
       midSprintCompletedCount: scorecard.midSprintCompletedCount,
     });
-    scorecard.narrative = narrative.summary;
+    // When the sprint has mid-sprint additions, the draft ends with a fixed note
+    // stating the exclusion, whatever the AI chose to say about it.
+    scorecard.narrative = withMidSprintNote(
+      narrative.summary,
+      scorecard.midSprintCount,
+      scorecard.midSprintCompletedCount,
+    );
     scorecard.narrativeError = narrative.error;
 
     return NextResponse.json(scorecard);

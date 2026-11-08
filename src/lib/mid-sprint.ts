@@ -52,3 +52,35 @@ export function isMidSprintAddition(row: SprintRow): boolean {
 export function excludeMidSprintAdditions(rows: SprintRow[]): SprintRow[] {
   return rows.filter((row) => !isMidSprintAddition(row));
 }
+
+/**
+ * The fixed sentence that states the exclusion, or null when the sprint has no
+ * mid-sprint additions. Appended to the AI-drafted Focus (Sprint Summary) and
+ * Summary (Weekly Scorecard) paragraphs so the reports say it in the same words
+ * every time, rather than depending on what the AI chose to mention.
+ */
+export function midSprintExclusionNote(count: number, completed: number): string | null {
+  if (count <= 0) return null;
+  const one = count === 1;
+  return (
+    `Note: ${one ? '1 task was' : `${count} tasks were`} added mid-sprint ` +
+    `(${one ? 'title ends' : 'titles ending'} in "(mid sprint)"; ${completed} complete). ` +
+    `${one ? 'It is' : 'They are'} listed separately and not counted in the task counts or completion rates.`
+  );
+}
+
+/**
+ * An AI draft with the exclusion note added at the end. When there is no draft
+ * (no AI key, or generation failed) the note stands alone, so the box the
+ * operator reviews still carries it. Unchanged when there's nothing to note.
+ */
+export function withMidSprintNote(
+  draft: string | null,
+  count: number,
+  completed: number,
+): string | null {
+  const note = midSprintExclusionNote(count, completed);
+  if (!note) return draft;
+  const text = draft?.trim();
+  return text ? `${text} ${note}` : note;
+}

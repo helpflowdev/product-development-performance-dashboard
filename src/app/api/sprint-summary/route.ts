@@ -6,6 +6,7 @@ import {
   getNonRecurringTaskTitles,
 } from '@/lib/sprint-summary-engine';
 import { generateFocusSummary } from '@/lib/sprint-focus-summary';
+import { withMidSprintNote } from '@/lib/mid-sprint';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -41,7 +42,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       sprintId,
       getNonRecurringTaskTitles(sprintRows, sprintId),
     );
-    summary.focusSummary = focus.summary;
+    // When the sprint has mid-sprint additions, the draft ends with a fixed note
+    // saying they're listed separately and not counted (the AI isn't told).
+    summary.focusSummary = withMidSprintNote(
+      focus.summary,
+      summary.midSprintCount,
+      summary.midSprintCompletedCount,
+    );
     summary.focusSummaryError = focus.error;
 
     return NextResponse.json(summary);

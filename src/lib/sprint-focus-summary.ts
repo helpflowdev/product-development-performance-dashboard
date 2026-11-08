@@ -332,10 +332,11 @@ export async function generateScorecardNarrative(
     `Story-point burndown rate: ${input.burndownRate.toFixed(2)}%`,
   ];
   // Lets the narrative credit scope added mid-sprint without implying it dragged
-  // the completion rates down — those rates already leave these tasks out.
+  // the completion rates down — those rates already leave these tasks out. The
+  // route appends a fixed note stating the exclusion, so the AI needn't repeat it.
   if (input.midSprintCount) {
     metrics.push(
-      `Tasks added mid-sprint (already EXCLUDED from all completion rates above): ${input.midSprintCount} (${input.midSprintCompletedCount ?? 0} complete)`,
+      `Tasks added mid-sprint (already EXCLUDED from all completion rates above; a note stating this is appended automatically, so do not restate the exclusion or this count): ${input.midSprintCount} (${input.midSprintCompletedCount ?? 0} complete)`,
     );
   }
   const metricsText = metrics.join('\n- ');
