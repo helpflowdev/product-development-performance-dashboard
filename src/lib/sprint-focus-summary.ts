@@ -304,6 +304,8 @@ export interface ScorecardNarrativeInput {
   burndownRate: number;
   totalHoursEstimate?: number;
   totalHoursActual?: number;
+  midSprintCount?: number; // tasks tagged "(mid sprint)", excluded from the rates
+  midSprintCompletedCount?: number;
 }
 
 /**
@@ -328,11 +330,19 @@ export async function generateScorecardNarrative(
     `Whole-team completion rate: ${input.teamCompletionRate.toFixed(2)}%`,
     `Story points consumed / allotted: ${input.consumedStoryPoints} / ${input.allottedStoryPoints}`,
     `Story-point burndown rate: ${input.burndownRate.toFixed(2)}%`,
-  ].join('\n- ');
+  ];
+  // Lets the narrative credit scope added mid-sprint without implying it dragged
+  // the completion rates down — those rates already leave these tasks out.
+  if (input.midSprintCount) {
+    metrics.push(
+      `Tasks added mid-sprint (already EXCLUDED from all completion rates above): ${input.midSprintCount} (${input.midSprintCompletedCount ?? 0} complete)`,
+    );
+  }
+  const metricsText = metrics.join('\n- ');
 
   return generate(
     SCORECARD_SYSTEM_PROMPT,
-    `Metrics:\n- ${metrics}${hoursLine}`,
+    `Metrics:\n- ${metricsText}${hoursLine}`,
     'scorecard-narrative',
   );
 }

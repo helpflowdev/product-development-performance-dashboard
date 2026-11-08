@@ -9,12 +9,13 @@ interface SprintSummaryViewProps {
   summary: SprintSummaryResponse;
 }
 
-/** One stat tile in the top row. */
-function MetricTile({ label, value }: { label: string; value: string }) {
+/** One stat tile in the top row, with an optional sub-line under the value. */
+function MetricTile({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
     <Card className="text-center">
       <p className="text-xs uppercase tracking-wide text-slate-400">{label}</p>
       <p className="mt-2 text-2xl font-bold text-white">{value}</p>
+      {sub && <p className="mt-1 text-xs text-slate-400">{sub}</p>}
     </Card>
   );
 }
@@ -116,7 +117,15 @@ export function SprintSummaryView({ summary }: SprintSummaryViewProps) {
       {/* Metric tiles */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <MetricTile label="Completed Tasks" value={`${summary.completedCount}`} />
-        <MetricTile label="Plotted Tasks" value={`${summary.plottedCount}`} />
+        <MetricTile
+          label="Plotted Tasks"
+          value={`${summary.plottedCount}`}
+          sub={
+            summary.midSprintCount > 0
+              ? `+${summary.midSprintCount} mid-sprint, not counted`
+              : undefined
+          }
+        />
         <MetricTile label="Completion Rate" value={`${summary.completionRate.toFixed(2)}%`} />
         <MetricTile
           label="Est / Actual Hours"
@@ -150,7 +159,17 @@ export function SprintSummaryView({ summary }: SprintSummaryViewProps) {
         to the next sprint. <span className="text-slate-400">Carried Over</span> =
         added to the next sprint (any status).{' '}
         <span className="text-slate-400">Plotted</span> = all tasks in this sprint,
-        including recurring (DT)/(WT)/(ST).
+        including recurring (DT)/(WT)/(ST)
+        {summary.midSprintCount > 0 ? (
+          <>
+            , except <span className="text-slate-400">mid-sprint additions</span>{' '}
+            (titles ending in &ldquo;(mid sprint)&rdquo;). Those are listed separately
+            and left out of every count and completion rate here, QTD included; hours
+            and story points still include them.
+          </>
+        ) : (
+          '.'
+        )}
       </p>
 
       {/* Per-assignee breakdown */}
@@ -172,7 +191,9 @@ export function SprintSummaryView({ summary }: SprintSummaryViewProps) {
                   <tr key={a.name} className="border-b border-white/5 last:border-b-0">
                     <td className="py-2 pr-4 text-slate-100 font-medium">{a.name}</td>
                     <td className="py-2 pr-4 text-slate-300">
-                      {a.completionRate.toFixed(2)}% ({a.completed}/{a.total})
+                      {a.total > 0
+                        ? `${a.completionRate.toFixed(2)}% (${a.completed}/${a.total})`
+                        : '— (mid-sprint additions only)'}
                     </td>
                     <td className="py-2 text-slate-300">
                       {noHours
@@ -205,6 +226,14 @@ export function SprintSummaryView({ summary }: SprintSummaryViewProps) {
           title="Incomplete (Not Carried Over)"
           groups={summary.incompleteTasks}
           accent="text-rose-400"
+          defaultOpen
+        />
+      )}
+      {summary.midSprintCount > 0 && (
+        <GroupedTaskList
+          title={`Mid-Sprint Additions — not counted (${summary.midSprintCompletedCount} complete)`}
+          groups={summary.midSprintTasks}
+          accent="text-violet-400"
           defaultOpen
         />
       )}

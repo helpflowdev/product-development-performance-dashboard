@@ -112,6 +112,12 @@ function buildScorecardLines(
     lines.push(`    QTD: ${sc.qtdCompletionRate.toFixed(2)}%`);
   }
   lines.push(`    Tasks: ${sc.totalTasks}  Completed: ${sc.totalCompleted}`);
+  // Said outright so a task count lower than Asana shows isn't a mystery.
+  if (sc.midSprintCount > 0) {
+    lines.push(
+      `    Mid-Sprint Additions (not counted): ${sc.midSprintCount} (${sc.midSprintCompletedCount} complete)`,
+    );
+  }
 
   lines.push(
     'Individual Completion Rate:',
@@ -147,9 +153,12 @@ function buildScorecardLines(
         a.hoursEstimate === 0 && a.hoursActual === 0
           ? ''
           : ` · ${formatHours(a.hoursActual)}/${formatHours(a.hoursEstimate)}h`;
-      lines.push(
-        `    ${a.name}: ${a.completionRate.toFixed(2)}% (${a.completed}/${a.total})${hours}`,
-      );
+      // total 0 = only mid-sprint additions (listed for their hours) — no rate.
+      const rate =
+        a.total > 0
+          ? `${a.completionRate.toFixed(2)}% (${a.completed}/${a.total})`
+          : 'mid-sprint additions only';
+      lines.push(`    ${a.name}: ${rate}${hours}`);
     }
   }
 
@@ -271,12 +280,16 @@ export async function sendScorecardToAsana(
     }
     await sleep(1000);
 
-    // 2-4. Task-level traceability: grouped, hyperlinked task lists (rich text).
+    // 2-5. Task-level traceability: grouped, hyperlinked task lists (rich text).
     //      Each helper no-ops on an empty list and returns how many it posted.
     const sections: Array<{ label: string; groups: typeof sc.completedTasks }> = [
       { label: 'Completed Tasks', groups: sc.completedTasks },
       { label: 'Carried Over to Next Sprint', groups: sc.carriedOverTasks },
       { label: 'Incomplete (Not Carried Over)', groups: sc.incompleteTasks },
+      {
+        label: `Mid-Sprint Additions — not counted in completion rate (${sc.midSprintCompletedCount} of ${sc.midSprintCount} complete)`,
+        groups: sc.midSprintTasks,
+      },
     ];
     for (const section of sections) {
       const posted = await postGroupedTaskListInChunks(gid, section.label, section.groups);

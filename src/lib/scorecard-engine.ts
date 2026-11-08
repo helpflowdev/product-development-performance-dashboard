@@ -10,6 +10,7 @@ import {
 } from './completion-rate-engine';
 import { computeSprintSummary } from './sprint-summary-engine';
 import { isDevMember } from './dev-members';
+import { excludeMidSprintAdditions } from './mid-sprint';
 
 /**
  * Weekly Scorecard engine.
@@ -27,6 +28,11 @@ import { isDevMember } from './dev-members';
  * Rows should already be run through backfillDerivedColumns (done in the route) so
  * the Role column the sync leaves blank is filled — otherwise devsCompletionRate
  * would undercount whenever role is sparse.
+ *
+ * Mid-sprint additions (title ends in "(mid sprint)", in the sprints mid-sprint.ts
+ * covers — only S2 for now) are left out of every completion figure here — this sprint, devs/team, QTD — and of the
+ * task counts, so these no longer match the Completion Rate page for a sprint
+ * that has them. Burndown still counts them, so it keeps matching the Burndown page.
  */
 
 /** Default completion-rate target shown beside the this-sprint rate. */
@@ -184,18 +190,25 @@ export function computeScorecard(
     );
   }
 
+  // The rows that count toward completion: mid-sprint additions are listed on
+  // the report but never plotted. countedScopedRows feeds the QTD trend, so the
+  // earlier sprints in the quarter get the same treatment as this one.
+  const countedScopedRows = excludeMidSprintAdditions(scopedRows);
+  const countedSprintRows = filterBySprints(countedScopedRows, [sprintId]);
+
   // Whole-team completion (this sprint) — computeSummary is the shared source of
-  // truth (Status column), so this equals the /completion-rate page for the sprint.
-  const teamSummary = computeSummary(sprintRows);
+  // truth (Status column), the same rule as the /completion-rate page, minus the
+  // mid-sprint additions.
+  const teamSummary = computeSummary(countedSprintRows);
 
   // Developers subset. Prefer the Role column ("Developer"); when the sync has
   // left roles blank and the role-filtered set is empty, fall back to matching
   // the assignee against the canonical dev roster.
-  const devRoleRows = filterByRoles(sprintRows, ['Developer']);
+  const devRoleRows = filterByRoles(countedSprintRows, ['Developer']);
   const devRows =
     devRoleRows.length > 0
       ? devRoleRows
-      : sprintRows.filter((r) => isDevMember(r.assigneeName));
+      : countedSprintRows.filter((r) => isDevMember(r.assigneeName));
   const devsCompletionRate = computeSummary(devRows).completionRate;
 
   // Burndown / story points — pass allRows as the 3rd arg so cross-sprint
@@ -222,7 +235,7 @@ export function computeScorecard(
     dateRange,
     completionRate: teamSummary.completionRate,
     completionGoal: input.completionGoal ?? DEFAULT_COMPLETION_GOAL,
-    qtdCompletionRate: computeQtdCompletionRate(scopedRows, sprintId),
+    qtdCompletionRate: computeQtdCompletionRate(countedScopedRows, sprintId),
     totalTasks: teamSummary.totalTasks,
     totalCompleted: teamSummary.totalCompleted,
     // Running/to-date completion needs live Asana due dates — the route fetches
@@ -245,6 +258,9 @@ export function computeScorecard(
     carriedOverTasks: summary.carriedOverTasks,
     completedTasks: summary.completedTasks,
     incompleteTasks: summary.incompleteTasks,
+    midSprintCount: summary.midSprintCount,
+    midSprintCompletedCount: summary.midSprintCompletedCount,
+    midSprintTasks: summary.midSprintTasks,
     // Attached by the route after the async Gemini call (pure engine stays sync).
     narrative: null,
     narrativeError: null,

@@ -199,6 +199,11 @@ export function ScorecardView({ scorecard: sc }: ScorecardViewProps) {
         <MetricTile
           label="Tasks (Completed / Total)"
           value={`${sc.totalCompleted} / ${sc.totalTasks}`}
+          sub={
+            sc.midSprintCount > 0
+              ? `+${sc.midSprintCount} mid-sprint, not counted`
+              : undefined
+          }
         />
         <MetricTile
           label="Story Points (Consumed / Allotted)"
@@ -226,6 +231,15 @@ export function ScorecardView({ scorecard: sc }: ScorecardViewProps) {
       <p className="text-xs text-slate-500">
         <span className="text-slate-400">This Sprint / QTD</span> use the Status
         column (same source as the Completion Rate page).{' '}
+        {sc.midSprintCount > 0 && (
+          <>
+            <span className="text-slate-400">Mid-sprint additions</span> (titles
+            ending in &ldquo;(mid sprint)&rdquo;) are left out of every completion rate
+            and task count on this card (This Sprint, Running, QTD, Devs, Team and
+            per-assignee) and listed separately below; hours and burndown story points
+            still include them.{' '}
+          </>
+        )}
         <span className="text-slate-400">Running</span> = of tasks due on/before
         today (by Asana due date, fetched live), how many are complete — the
         mid-sprint &ldquo;on-pace&rdquo; view; tasks with no due date are excluded.{' '}
@@ -256,7 +270,9 @@ export function ScorecardView({ scorecard: sc }: ScorecardViewProps) {
                   <tr key={a.name} className="border-b border-white/5 last:border-b-0">
                     <td className="py-2 pr-4 text-slate-100 font-medium">{a.name}</td>
                     <td className="py-2 pr-4 text-slate-300">
-                      {a.completionRate.toFixed(2)}% ({a.completed}/{a.total})
+                      {a.total > 0
+                        ? `${a.completionRate.toFixed(2)}% (${a.completed}/${a.total})`
+                        : '— (mid-sprint additions only)'}
                     </td>
                     <td className="py-2 text-slate-300">
                       {noHours
@@ -288,6 +304,14 @@ export function ScorecardView({ scorecard: sc }: ScorecardViewProps) {
           title="Incomplete (Not Carried Over)"
           groups={sc.incompleteTasks}
           accent="text-rose-400"
+          defaultOpen
+        />
+      )}
+      {sc.midSprintCount > 0 && (
+        <GroupedTaskList
+          title={`Mid-Sprint Additions — not counted (${sc.midSprintCompletedCount} complete)`}
+          groups={sc.midSprintTasks}
+          accent="text-violet-400"
           defaultOpen
         />
       )}

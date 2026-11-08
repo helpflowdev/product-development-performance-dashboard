@@ -2,6 +2,7 @@ import { ScorecardResponse } from '@/types/scorecard';
 import { SprintRow } from '@/types/sprint';
 import { fetchSprintAsanaData } from './asana';
 import { filterBySprints } from './completion-rate-engine';
+import { excludeMidSprintAdditions } from './mid-sprint';
 import { computeRunningCompletion } from './scorecard-engine';
 
 /**
@@ -14,7 +15,8 @@ import { computeRunningCompletion } from './scorecard-engine';
  *   - sprintProjectGid: that same project's gid, which the send uses to find the
  *     scorecard subtask belonging to this sprint (see findSprintScorecardSubtask).
  *   - the running / to-date completion (due-based) from each task's due date,
- *     which isn't in the sheet.
+ *     which isn't in the sheet. Mid-sprint additions are left out, like every
+ *     other completion figure on the scorecard.
  *
  * Never throws: on an Asana failure it records runningCompletionError, leaves
  * runningCompletionRate null and sprintUrl null, so the rest still renders/sends.
@@ -30,7 +32,9 @@ export async function attachAsanaContext(
     scorecard.sprintUrl = projectUrl;
     scorecard.sprintProjectGid = projectGid;
 
-    const sprintRows = filterBySprints(allRows, [scorecard.sprintId]);
+    const sprintRows = filterBySprints(excludeMidSprintAdditions(allRows), [
+      scorecard.sprintId,
+    ]);
     const running = computeRunningCompletion(sprintRows, dueByLink);
     scorecard.runningCompletionRate = running.runningCompletionRate;
     scorecard.tasksDue = running.tasksDue;

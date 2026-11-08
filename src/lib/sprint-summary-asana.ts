@@ -21,8 +21,8 @@ import {
  * "DEV - End of Sprint Summary" (so every sprint's summary collects under one
  * parent), posts the metrics + per-assignee breakdown as a rich-text comment
  * (rich so its cc: line can @mention the collaborators), then posts the
- * Completed / Carried-Over / Incomplete / Next-Sprint lists as rich-text
- * comments with hyperlinked titles grouped per assignee.
+ * Completed / Carried-Over / Incomplete / Mid-Sprint / Next-Sprint lists as
+ * rich-text comments with hyperlinked titles grouped per assignee.
  */
 
 /** Standing parent task the summary subtask is created under ("DEV - End of Sprint Summary"). */
@@ -76,8 +76,14 @@ function buildSummaryLines(summary: SprintSummaryResponse): string[] {
     `Completed Tasks: ${summary.completedCount}`,
     `Plotted Tasks: ${summary.plottedCount}`,
     `Carried Over to Next Sprint: ${summary.carriedOverCount}`,
-    `Completion Rate: ${summary.completionRate.toFixed(2)}%`,
   );
+  // Said outright so a lower plotted count than Asana shows isn't a mystery.
+  if (summary.midSprintCount > 0) {
+    lines.push(
+      `Mid-Sprint Additions (not counted in tasks or rates): ${summary.midSprintCount} (${summary.midSprintCompletedCount} complete)`,
+    );
+  }
+  lines.push(`Completion Rate: ${summary.completionRate.toFixed(2)}%`);
 
   // Trend: this-sprint vs quarter-to-date (falls back to this-sprint when the
   // sprint id can't be parsed into a quarter).
@@ -101,6 +107,8 @@ function buildSummaryLines(summary: SprintSummaryResponse): string[] {
   );
 
   for (const a of summary.assignees) {
+    // total 0 = only mid-sprint additions — nothing plotted, so no rate to show.
+    if (a.total === 0) continue;
     lines.push(`${a.name}: ${a.completionRate.toFixed(2)}% (${a.completed}/${a.total})`);
   }
 
@@ -198,12 +206,16 @@ export async function sendSprintSummaryToAsana(
     if (summaryResult.success) commentsPosted++;
     await sleep(1000);
 
-    // 2-5. Grouped, hyperlinked task lists (rich text). Each helper no-ops on
+    // 2-6. Grouped, hyperlinked task lists (rich text). Each helper no-ops on
     //      an empty list and returns how many comments it posted.
     const sections: Array<{ label: string; groups: typeof summary.completedTasks }> = [
       { label: 'Completed Tasks', groups: summary.completedTasks },
       { label: 'Carried Over to Next Sprint', groups: summary.carriedOverTasks },
       { label: 'Incomplete (Not Carried Over)', groups: summary.incompleteTasks },
+      {
+        label: `Mid-Sprint Additions — not counted in completion rate (${summary.midSprintCompletedCount} of ${summary.midSprintCount} complete)`,
+        groups: summary.midSprintTasks,
+      },
       {
         label: summary.nextSprintName
           ? `Next Sprint Tasks — ${summary.nextSprintName}`

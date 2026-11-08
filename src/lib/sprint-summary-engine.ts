@@ -7,20 +7,26 @@ import {
 } from '@/types/sprint-summary';
 import { resolveNextSprintName } from './burndown-engine';
 import { computeQtdCompletionRate } from './completion-rate-engine';
+import { excludeMidSprintAdditions, isMidSprintAddition } from './mid-sprint';
 
 /**
  * Sprint Summary engine.
  *
  * Computes, for a selected sprint: the plotted/completed/carried-over counts,
  * completion rate, hours, a per-assignee breakdown, and the Completed /
- * Carried-Over / Incomplete / Next-Sprint task lists (each grouped by assignee
- * with task titles for hyperlinked display). No I/O — the route hands in rows.
+ * Carried-Over / Incomplete / Mid-Sprint / Next-Sprint task lists (each grouped
+ * by assignee with task titles for hyperlinked display). No I/O — the route
+ * hands in rows.
  *
  * Definitions (confirmed with the team):
+ *   - Mid-Sprint:   title ends in "(mid sprint)" — added after the sprint started —
+ *                   in a sprint the rule covers (only S2 for now; see mid-sprint.ts).
+ *                   Listed on its own and left out of every count and rate below.
+ *                   Its hours and story points still count.
  *   - Carried Over: the same Asana task (by link) also appears in the NEXT sprint.
  *   - Completed:    status "Complete" AND not carried over.
  *   - Incomplete:   not "Complete" AND not carried over.
- *   - Plotted:      ALL tasks in the sprint (= the three buckets).
+ *   - Plotted:      every other task in the sprint (= the three buckets above).
  * Unlike the burndown, recurring (DT)/(WT)/(ST) tasks ARE included here.
  */
 
@@ -155,6 +161,8 @@ export function computeSprintSummary(
   const completedItems: { assignee: string; ref: TaskRef }[] = [];
   const carriedOverItems: { assignee: string; ref: TaskRef }[] = [];
   const incompleteItems: { assignee: string; ref: TaskRef }[] = [];
+  const midSprintItems: { assignee: string; ref: TaskRef }[] = [];
+  let midSprintCompletedCount = 0;
 
   let totalHoursEstimate = 0;
   let totalHoursActual = 0;
@@ -182,12 +190,22 @@ export function computeSprintSummary(
     if (!metrics[assignee]) {
       metrics[assignee] = { total: 0, completed: 0, hoursEstimate: 0, hoursActual: 0 };
     }
-    metrics[assignee].total++;
     metrics[assignee].hoursEstimate += hoursEstimate;
     metrics[assignee].hoursActual += hoursActual;
-    if (completed) metrics[assignee].completed++;
 
     const ref = taskRef(row);
+
+    // Mid-sprint additions keep their hours and story points (above) but stay out
+    // of every count and rate: listed on their own, never plotted or completed.
+    if (isMidSprintAddition(row)) {
+      midSprintItems.push({ assignee, ref });
+      if (isComplete) midSprintCompletedCount++;
+      continue;
+    }
+
+    metrics[assignee].total++;
+    if (completed) metrics[assignee].completed++;
+
     if (carriedOver) carriedOverItems.push({ assignee, ref });
     else if (completed) completedItems.push({ assignee, ref });
     else incompleteItems.push({ assignee, ref });
@@ -196,9 +214,15 @@ export function computeSprintSummary(
   const plottedCount =
     completedItems.length + carriedOverItems.length + incompleteItems.length;
 
-  // Per-assignee breakdown in canonical order (only assignees with tasks).
-  const assignees: AssigneeSummary[] = canonicalOrder(Object.keys(metrics)).map(
-    (name) => {
+  // Per-assignee breakdown in canonical order. Someone whose only tasks are
+  // mid-sprint additions has nothing plotted (total 0) — they stay listed only
+  // when they logged hours, so the hours roll-up still adds up to the total.
+  const assignees: AssigneeSummary[] = canonicalOrder(Object.keys(metrics))
+    .filter((name) => {
+      const m = metrics[name];
+      return m.total > 0 || m.hoursEstimate !== 0 || m.hoursActual !== 0;
+    })
+    .map((name) => {
       const m = metrics[name];
       return {
         name,
@@ -208,8 +232,7 @@ export function computeSprintSummary(
         hoursEstimate: m.hoursEstimate,
         hoursActual: m.hoursActual,
       };
-    },
-  );
+    });
 
   // Next-sprint task list, grouped by assignee (all statuses).
   const nextSprintTasks = groupByAssignee(
@@ -234,11 +257,16 @@ export function computeSprintSummary(
       totalStoryPointsPlotted > 0
         ? (totalStoryPointsCompleted / totalStoryPointsPlotted) * 100
         : 0,
-    qtdCompletionRate: computeQtdCompletionRate(allRows, target),
+    // QTD leaves mid-sprint additions out of every sprint in the quarter, the
+    // same way this sprint's rate does.
+    qtdCompletionRate: computeQtdCompletionRate(excludeMidSprintAdditions(allRows), target),
     assignees,
     completedTasks: groupByAssignee(completedItems),
     carriedOverTasks: groupByAssignee(carriedOverItems),
     incompleteTasks: groupByAssignee(incompleteItems),
+    midSprintCount: midSprintItems.length,
+    midSprintCompletedCount,
+    midSprintTasks: groupByAssignee(midSprintItems),
     nextSprintName,
     nextSprintTasks,
     // Attached by the route after an async Gemini call (pure engine stays sync).

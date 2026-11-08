@@ -24,7 +24,10 @@ export interface AssigneeTaskGroup {
 /**
  * Per-assignee roll-up for the breakdown table.
  * `completed` follows the sprint-aware definition (Complete AND not carried over).
- * `total` is the assignee's plotted (non-recurring) task count.
+ * `total` is the assignee's plotted task count — mid-sprint additions excluded,
+ * so it is 0 for someone whose only tasks were added mid-sprint (they're kept in
+ * the list only for their hours; show no rate for them).
+ * Hours cover ALL the assignee's tasks, mid-sprint additions included.
  */
 export interface AssigneeSummary {
   name: string;
@@ -36,29 +39,42 @@ export interface AssigneeSummary {
 }
 
 /**
- * Full computed summary for one sprint. All counts/lists cover EVERY task in the
- * sprint, including recurring (DT)/(WT)/(ST) — unlike the burndown.
+ * Full computed summary for one sprint. Counts, rates and lists cover every task
+ * in the sprint, including recurring (DT)/(WT)/(ST) — unlike the burndown — EXCEPT
+ * mid-sprint additions (title ends in "(mid sprint)", in a sprint mid-sprint.ts
+ * covers — only S2 for now), which are left out of every
+ * count and rate and listed separately in midSprintTasks. Hours and story points
+ * still include them.
  */
 export interface SprintSummaryResponse {
   sprintId: string;
 
-  plottedCount: number; // total tasks plotted in the sprint (incl. recurring)
+  plottedCount: number; // tasks plotted in the sprint (incl. recurring, excl. mid-sprint)
   completedCount: number; // Complete AND not carried over
   carriedOverCount: number; // also appears in the next sprint
   incompleteCount: number; // not Complete AND not carried over
   completionRate: number; // completedCount / plottedCount * 100
 
-  totalHoursEstimate: number;
-  totalHoursActual: number;
+  totalHoursEstimate: number; // all tasks, mid-sprint additions included
+  totalHoursActual: number; // all tasks, mid-sprint additions included
 
   // Story points (sprint-aware, same completed/carried-over rule as the counts).
+  // Mid-sprint additions included, like hours.
   totalStoryPointsPlotted: number; // sum of storyPoints across all sprint tasks
   totalStoryPointsCompleted: number; // sum where Complete AND not carried over
   storyPointBurndownRate: number; // completed / plotted * 100 (0 when plotted === 0)
 
-  // Trend: quarter-to-date completion rate (same year+quarter, up to this sprint).
+  // Trend: quarter-to-date completion rate (same year+quarter, up to this sprint),
+  // mid-sprint additions excluded from every sprint in range.
   // null when the sprint id can't be parsed into a quarter.
   qtdCompletionRate: number | null;
+
+  // Mid-sprint additions: tasks whose title ends in "(mid sprint)" (Security Issue
+  // process), in a sprint mid-sprint.ts covers (only S2 for now; 0 elsewhere).
+  // Shown for visibility only — NOT in any count or rate above.
+  midSprintCount: number;
+  midSprintCompletedCount: number; // of those, Status === "Complete"
+  midSprintTasks: AssigneeTaskGroup[];
 
   // Per-assignee breakdown, ordered: known team members first, then others, Unknown last.
   assignees: AssigneeSummary[];

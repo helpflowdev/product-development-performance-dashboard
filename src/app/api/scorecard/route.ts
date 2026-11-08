@@ -76,6 +76,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       burndownRate: scorecard.burndownRate,
       totalHoursEstimate: scorecard.totalHoursEstimate,
       totalHoursActual: scorecard.totalHoursActual,
+      midSprintCount: scorecard.midSprintCount,
+      midSprintCompletedCount: scorecard.midSprintCompletedCount,
     });
     scorecard.narrative = narrative.summary;
     scorecard.narrativeError = narrative.error;
