@@ -69,7 +69,13 @@ function buildSummaryLines(summary: SprintSummaryResponse): string[] {
   ];
 
   if (summary.focusSummary) {
-    lines.push('Focus:', summary.focusSummary);
+    // One line per paragraph — the draft can end with the mid-sprint exclusion
+    // note as a paragraph of its own, which should stay on its own line.
+    const paragraphs = summary.focusSummary
+      .split(/\n+/)
+      .map((p) => p.trim())
+      .filter(Boolean);
+    if (paragraphs.length > 0) lines.push('Focus:', ...paragraphs);
   }
 
   lines.push(

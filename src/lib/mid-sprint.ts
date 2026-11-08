@@ -70,9 +70,12 @@ export function midSprintExclusionNote(count: number, completed: number): string
 }
 
 /**
- * An AI draft with the exclusion note added at the end. When there is no draft
- * (no AI key, or generation failed) the note stands alone, so the box the
- * operator reviews still carries it. Unchanged when there's nothing to note.
+ * An AI draft with the exclusion note added at the end, as its own paragraph so
+ * it reads clearly even when the AI text ends badly (drafts are occasionally cut
+ * off mid-sentence). The report builders post each paragraph as its own line.
+ * When there is no draft (no AI key, or generation failed) the note stands
+ * alone, so the box the operator reviews still carries it. Unchanged when
+ * there's nothing to note.
  */
 export function withMidSprintNote(
   draft: string | null,
@@ -82,5 +85,5 @@ export function withMidSprintNote(
   const note = midSprintExclusionNote(count, completed);
   if (!note) return draft;
   const text = draft?.trim();
-  return text ? `${text} ${note}` : note;
+  return text ? `${text}\n\n${note}` : note;
 }

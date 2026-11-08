@@ -167,7 +167,13 @@ function buildScorecardLines(
   }
 
   if (sc.narrative && sc.narrative.trim()) {
-    lines.push('Summary:', `    ${sc.narrative.trim()}`);
+    // One indented line per paragraph — the draft can end with the mid-sprint
+    // exclusion note as a paragraph of its own, which should stay on its own line.
+    const paragraphs = sc.narrative
+      .split(/\n+/)
+      .map((p) => p.trim())
+      .filter(Boolean);
+    lines.push('Summary:', ...paragraphs.map((p) => `    ${p}`));
   }
 
   return lines;
