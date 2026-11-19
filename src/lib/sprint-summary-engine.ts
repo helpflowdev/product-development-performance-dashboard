@@ -20,7 +20,7 @@ import { excludeMidSprintAdditions, isMidSprintAddition } from './mid-sprint';
  *
  * Definitions (confirmed with the team):
  *   - Mid-Sprint:   title ends in "(mid sprint)" — added after the sprint started —
- *                   in a sprint the rule covers (only S2 for now; see mid-sprint.ts).
+ *                   in a sprint the rule covers (S2 only; S3 and later count them; see mid-sprint.ts).
  *                   Listed on its own and left out of every count and rate below.
  *                   Its hours and story points still count.
  *   - Carried Over: the same Asana task (by link) also appears in the NEXT sprint.

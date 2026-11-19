@@ -42,7 +42,7 @@ export interface AssigneeSummary {
  * Full computed summary for one sprint. Counts, rates and lists cover every task
  * in the sprint, including recurring (DT)/(WT)/(ST) — unlike the burndown — EXCEPT
  * mid-sprint additions (title ends in "(mid sprint)", in a sprint mid-sprint.ts
- * covers — only S2 for now), which are left out of every
+ * covers — S2 only; S3 and later count them), which are left out of every
  * count and rate and listed separately in midSprintTasks. Hours and story points
  * still include them.
  */
@@ -70,7 +70,7 @@ export interface SprintSummaryResponse {
   qtdCompletionRate: number | null;
 
   // Mid-sprint additions: tasks whose title ends in "(mid sprint)" (Security Issue
-  // process), in a sprint mid-sprint.ts covers (only S2 for now; 0 elsewhere).
+  // process), in a sprint mid-sprint.ts covers (S2 only; S3 and later count them; 0 elsewhere).
   // Shown for visibility only — NOT in any count or rate above.
   midSprintCount: number;
   midSprintCompletedCount: number; // of those, Status === "Complete"

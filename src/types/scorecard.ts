@@ -73,7 +73,7 @@ export interface ScorecardResponse {
   incompleteTasks: AssigneeTaskGroup[]; // unfinished, not carried over
 
   // Mid-sprint additions: tasks whose title ends in "(mid sprint)" (Security Issue
-  // process), in a sprint mid-sprint.ts covers (only S2 for now; 0 elsewhere).
+  // process), in a sprint mid-sprint.ts covers (S2 only; S3 and later count them; 0 elsewhere).
   // Left out of EVERY completion figure and task count on this card —
   // this sprint, running, QTD, devs/team, per-assignee — and listed here so they
   // stay visible. Hours and burndown story points still include them.

@@ -30,7 +30,7 @@ import { excludeMidSprintAdditions } from './mid-sprint';
  * would undercount whenever role is sparse.
  *
  * Mid-sprint additions (title ends in "(mid sprint)", in the sprints mid-sprint.ts
- * covers — only S2 for now) are left out of every completion figure here — this sprint, devs/team, QTD — and of the
+ * covers — S2 only; S3 and later count them) are left out of every completion figure here — this sprint, devs/team, QTD — and of the
  * task counts, so these no longer match the Completion Rate page for a sprint
  * that has them. Burndown still counts them, so it keeps matching the Burndown page.
  */

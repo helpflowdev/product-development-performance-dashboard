@@ -12,11 +12,12 @@ import { SprintRow } from '@/types/sprint';
  *   - the per-assignee completed-vs-plotted rates
  * Hours and story points still include these tasks — the effort was spent.
  *
- * SCOPE — only the sprints listed in MID_SPRINT_EXCLUSION_SPRINTS. The rule was
- * agreed for Sprint #2026.Q4.S2 only; whether it carries on to later sprints
- * hasn't been decided, so in every other sprint a "(mid sprint)" task counts like
- * any other. To extend it, add the sprint's exact name (the sheet's Sprint column)
- * to the list.
+ * SCOPE — only the sprints listed in MID_SPRINT_EXCLUSION_SPRINTS. The exemption
+ * was for Sprint #2026.Q4.S2 only, and it was confirmed (2026-11-19) that it does
+ * NOT carry on: from S3 onward a "(mid sprint)" task counts like any other —
+ * including an S2 addition that carried over into S3. Don't add later sprints
+ * unless the rule is re-agreed; if it is, add the sprint's exact name (the sheet's
+ * Sprint column) to the list.
  *
  * The check is per ROW (the row's own sprint), not per report. So S2's tagged
  * tasks stay out of the Q4 QTD on later sprints' reports too — S2 contributes the
