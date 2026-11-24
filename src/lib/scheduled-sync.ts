@@ -3,17 +3,18 @@ import { syncSprintData } from '@/lib/sync-engine';
 import { todayInTimezone, toDateString } from '@/lib/date-utils';
 
 /**
- * Scheduled (Vercel Cron) sync — keeps the sheet current without anyone
- * clicking Sync. Before this, the sheet only changed on a manual sync, so the
- * burndown silently showed whatever was synced last (on 2026-11-23 that was
- * Sunday ~9:30 PM, hiding all of Monday's completions).
+ * Scheduled sync — keeps the sheet current without anyone clicking Sync.
+ * Before this, the sheet only changed on a manual sync, so the burndown
+ * silently showed whatever was synced last (on 2026-11-23 that was Sunday
+ * ~9:30 PM, hiding all of Monday's completions).
  *
  *   current  — the sprint whose date range contains today (team timezone).
  *   previous — the sprint that ended most recently, for PREVIOUS_GRACE_DAYS
  *              after its end, so late completions still land in its numbers.
  *
- * Schedules live in vercel.json. When CRON_SECRET is set (Vercel sends it as
- * "Authorization: Bearer <secret>" on cron calls), any other caller gets 401.
+ * The schedule lives in .github/workflows/scheduled-sync.yml (GitHub Actions —
+ * the Vercel plan only allows daily crons). When CRON_SECRET is set, callers
+ * must send "Authorization: Bearer <secret>"; anyone else gets 401.
  */
 export type ScheduledTarget = 'current' | 'previous';
 

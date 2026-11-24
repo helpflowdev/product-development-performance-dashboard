@@ -47,17 +47,20 @@ GEMINI_API_KEY=<key>
 TIMEZONE=Etc/GMT+8                   # PST (UTC-8, no DST; the sign is inverted in Etc/ names) — Asana dates, report headers, burndown 'today'
 
 # Scheduled sync (recommended)
-CRON_SECRET=<random string>          # Vercel sends it on cron calls; other callers of /api/cron/* get 401
+CRON_SECRET=<random string>          # when set, /api/cron/* needs "Authorization: Bearer <it>"; add the same value as the GitHub repo secret CRON_SECRET
 ```
 
 ## Asana → sheet sync
 
 The dashboards read the Google Sheet, which only changes when a sync runs:
 
-- **Scheduled (Vercel Cron, see `vercel.json`)** — every 3 hours the current sprint
-  (the one whose dates contain today, PST) is synced; every 6 hours the sprint
-  that just ended is synced too, for 7 days after its end date, so late
-  completions still count. Crons run on production deployments only.
+- **Scheduled (GitHub Actions, see `.github/workflows/scheduled-sync.yml`)** —
+  every 3 hours the current sprint (the one whose dates contain today, PST) is
+  synced; every 6 hours the sprint that just ended is synced too, for 7 days after
+  its end date, so late completions still count. The workflow calls the production
+  dashboard's `/api/cron/sync-*-sprint` endpoints. It runs from GitHub because the
+  Vercel plan only allows daily crons, and it can also be run by hand from the
+  repo's Actions tab.
 - **Manual** — the Sync page, for any sprint, any time.
 
 Both use the same sync and share a run lock, so a scheduled run and a manual click

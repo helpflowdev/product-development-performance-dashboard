@@ -13,7 +13,7 @@ import { QALogPanel } from '@/components/burndown/QALogPanel';
 import { BurndownInfoButton } from '@/components/burndown/BurndownInfoButton';
 
 /**
- * Past this, the scheduled sync (every 3 hours, see vercel.json) has missed a
+ * Past this, the scheduled sync (every 3 hours, see .github/workflows/scheduled-sync.yml) has missed a
  * run — an hour of slack on top of the normal gap.
  */
 const STALE_AFTER_MIN = 240;

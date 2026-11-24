@@ -1,0 +1,69 @@
+# Scheduled Asana → Google Sheet sync for the dashboard.
+#
+# Calls the dashboard's /api/cron/sync-*-sprint endpoints, which run the same
+# sync as the manual Sync page (see src/lib/scheduled-sync.ts). Runs from GitHub
+# Actions rather than Vercel Cron because the Vercel plan only allows daily crons.
+#
+# Times are UTC. Minutes 7/37 avoid GitHub's top-of-the-hour queue delays.
+#   current sprint:  every 3 hours  (4:07 PM, 7:07 PM, 10:07 PM, ... PST)
+#   previous sprint: every 6 hours  (only acts for 7 days after a sprint ends)
+#
+# If CRON_SECRET is set in Vercel, add the same value as a repository secret
+# named CRON_SECRET so these calls are accepted.
+#
+# Note: GitHub disables scheduled workflows in public repos after 60 days with no
+# repository activity. Re-enable it from the Actions tab if that ever happens.
+name: Scheduled Asana sync
+
+on:
+  schedule:
+    - cron: '7 */3 * * *'
+    - cron: '37 */6 * * *'
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Which sprint to sync
+        type: choice
+        options: [current, previous]
+        default: current
+
+concurrency:
+  group: scheduled-asana-sync
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  sync:
+    # Only the deploy repo — never forks or mirrors.
+    if: github.repository == 'helpflowdev/product-development-performance-dashboard'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Call the dashboard sync endpoint
+        env:
+          BASE_URL: https://pd-performance-dash.vercel.app
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          EVENT: ${{ github.event_name }}
+          SCHEDULE: ${{ github.event.schedule }}
+          INPUT_TARGET: ${{ inputs.target }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            target="$INPUT_TARGET"
+          elif [ "$SCHEDULE" = "37 */6 * * *" ]; then
+            target=previous
+          else
+            target=current
+          fi
+
+          auth=()
+          if [ -n "$CRON_SECRET" ]; then auth=(-H "Authorization: Bearer $CRON_SECRET"); fi
+
+          code=$(curl -sS -o resp.json -w '%{http_code}' --max-time 120 "${auth[@]}" \
+            "$BASE_URL/api/cron/sync-$target-sprint" || echo 000)
+          echo "target=$target HTTP $code"
+          # Summary only — the logs of a public repo are public.
+          jq -c '{sprintName, success, skipped, reason, totalTasks, tasksInserted, tasksDeleted, error, durationMs}' resp.json 2>/dev/null \
+            || head -c 500 resp.json || true
+          test "$code" = 200
