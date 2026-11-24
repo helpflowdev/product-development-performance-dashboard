@@ -17,6 +17,7 @@ export interface SyncResult {
   totalTasks: number;
   datesFilled: number;       // "Date Added to Sprint" (col X) values backfilled this run
   error?: string;
+  lockBusy?: boolean;        // true when turned away because another sync was already running
   durationMs: number;
 }
 

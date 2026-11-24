@@ -133,12 +133,25 @@ export async function findProjectInWorkspace(
   sprintName: string,
   log?: LogFn,
 ): Promise<AsanaProject | null> {
-  const workspaceId = await resolveWorkspaceId();
-  if (!workspaceId) return null;
-
   const target = sprintName.trim();
-  const query = encodeURIComponent(target);
-  const url = `${ASANA_BASE_URL}/workspaces/${workspaceId}/typeahead?resource_type=project&count=20&opt_fields=name&query=${query}`;
+  const projects = await searchWorkspaceProjects(target, 20);
+  const match = projects.find((p) => p.name.trim() === target) ?? null;
+  if (match && log) log(`Found "${match.name}" in the workspace.`);
+  return match;
+}
+
+/**
+ * Typeahead-search projects across the whole workspace (not team-scoped).
+ * Returns [] when no workspace can be resolved. `count` is capped at 100 by Asana.
+ */
+export async function searchWorkspaceProjects(
+  query: string,
+  count = 20,
+): Promise<AsanaProject[]> {
+  const workspaceId = await resolveWorkspaceId();
+  if (!workspaceId) return [];
+
+  const url = `${ASANA_BASE_URL}/workspaces/${workspaceId}/typeahead?resource_type=project&count=${count}&opt_fields=name&query=${encodeURIComponent(query)}`;
   const response = await fetch(url, { method: 'GET', headers: getHeaders() });
 
   if (!response.ok) {
@@ -149,10 +162,7 @@ export async function findProjectInWorkspace(
   }
 
   const data = await response.json();
-  const match =
-    (data.data as AsanaProject[]).find((p) => p.name.trim() === target) ?? null;
-  if (match && log) log(`Found "${match.name}" in the workspace.`);
-  return match;
+  return data.data as AsanaProject[];
 }
 
 /**

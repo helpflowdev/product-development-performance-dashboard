@@ -56,6 +56,10 @@ export interface BurndownResponse {
   burndownRateToDate: string | null;      // up to date: consumed ÷ ideal-expected-by-today; null before sprint starts
   dailyIdealBurn: number;                 // expected story points to burn per day
   computedAt: string;                     // ISO timestamp
+  lastSync: {                             // this sprint's last successful Asana→sheet sync; null = not recorded yet
+    at: string;                           // ISO timestamp (UTC)
+    trigger: string;                      // "manual" | "scheduled"
+  } | null;
 }
 
 /**

@@ -12,6 +12,70 @@ import { BurndownTable } from '@/components/burndown/BurndownTable';
 import { QALogPanel } from '@/components/burndown/QALogPanel';
 import { BurndownInfoButton } from '@/components/burndown/BurndownInfoButton';
 
+/**
+ * Past this, the scheduled sync (every 3 hours, see vercel.json) has missed a
+ * run — an hour of slack on top of the normal gap.
+ */
+const STALE_AFTER_MIN = 240;
+
+function formatAge(minutes: number): string {
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return `${minutes} min ago`;
+  if (minutes < 48 * 60) return `${Math.round(minutes / 60)} h ago`;
+  return `${Math.round(minutes / (24 * 60))} days ago`;
+}
+
+/**
+ * How old the sheet data behind this chart is. The burndown only knows what the
+ * last Asana sync wrote, so completions after that time aren't plotted yet —
+ * showing it keeps a stale chart from looking like missing work.
+ */
+function SyncFreshness({
+  lastSync,
+  computedAt,
+}: {
+  lastSync: BurndownResponse['lastSync'];
+  computedAt: string;
+}) {
+  if (!lastSync) {
+    return (
+      <p className="text-sm text-slate-400">
+        Last Asana sync time not recorded yet. It appears after this sprint&apos;s next sync.
+      </p>
+    );
+  }
+
+  const synced = new Date(lastSync.at);
+  const ageMin = Math.max(
+    0,
+    Math.round((new Date(computedAt).getTime() - synced.getTime()) / 60000),
+  );
+  const stale = ageMin > STALE_AFTER_MIN;
+  const when = synced.toLocaleString(undefined, {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZoneName: 'short',
+  });
+  const how =
+    lastSync.trigger === 'scheduled'
+      ? ' (scheduled)'
+      : lastSync.trigger === 'manual'
+        ? ' (manual)'
+        : '';
+
+  return (
+    <p className={`text-sm ${stale ? 'text-amber-300' : 'text-slate-300'}`}>
+      <span className="font-medium">Asana data last synced:</span> {when}
+      {how}, {formatAge(ageMin)}.
+      {stale && ' Tasks completed after that are not in this chart yet. Run a sync to update it.'}
+    </p>
+  );
+}
+
 export default function BurndownPage() {
   const [sprints, setSprints] = useState<SprintMeta[]>([]);
   const [selectedSprint, setSelectedSprint] = useState<string>('');
@@ -125,6 +189,11 @@ export default function BurndownPage() {
 
         {burndownData && (
           <div className="space-y-6">
+            <SyncFreshness
+              lastSync={burndownData.lastSync}
+              computedAt={burndownData.computedAt}
+            />
+
             {/* Summary Stats */}
             <Card>
               <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-6">

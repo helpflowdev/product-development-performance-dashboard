@@ -14,10 +14,26 @@ import {
   appendSheetRows,
   deleteSheetRows,
   invalidateSheetCache,
+  acquireSyncLock,
+  releaseSyncLock,
+  recordSprintSync,
 } from '@/lib/sheets';
 import { AsanaTask, SyncResult } from '@/types/sync';
 
 type LogFn = (message: string) => void;
+
+/** What started a sync — recorded in the Sync Log next to the sync time. */
+export type SyncTrigger = 'manual' | 'scheduled';
+
+/**
+ * A run lock older than this is treated as abandoned. The sync routes cap at
+ * 60s (maxDuration), so a live run can never hold it this long.
+ */
+const SYNC_LOCK_TTL_MS = 120_000;
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
 
 /**
  * Sheet layout contract:
@@ -74,18 +90,82 @@ function prepareTaskRow(
 }
 
 /**
- * Main sync orchestrator. Replace-per-sprint strategy: snapshot the sprint's
- * existing rows, wipe the whole section, and re-add it fresh from Asana. This
- * avoids the fragile per-task matching (by task-URL + sprint name) that drifted
- * — and silently duplicated rows — whenever a sprint was renamed or a task link
- * changed.
+ * Sync one sprint from Asana into the sheet. Used by both the manual Sync page
+ * and the scheduled (cron) sync.
+ *
+ * Holds the Sync Log run lock for the duration, so a scheduled run and a manual
+ * click can never rewrite the sheet at the same time; the second one is turned
+ * away with `lockBusy: true`. On success the sprint's sync time is recorded for
+ * the burndown's "last synced" line. Lock/log problems are logged as warnings
+ * and never fail an otherwise good sync.
  */
 export async function syncSprintData(
   sprintName: string,
   log: LogFn = console.log,
+  trigger: SyncTrigger = 'manual',
 ): Promise<SyncResult> {
   const startTime = Date.now();
+  const holder = `${trigger}-${startTime}-${Math.random().toString(36).slice(2, 8)}`;
 
+  let lockHeld = false;
+  try {
+    const lock = await acquireSyncLock(holder, SYNC_LOCK_TTL_MS);
+    if (!lock.acquired) {
+      const secs = Math.max(0, Math.round((Date.now() - Date.parse(lock.since)) / 1000));
+      const error = `Another sync is already running (started ${secs}s ago). Try again in a minute.`;
+      log(`Error: ${error}`);
+      return {
+        success: false,
+        sprintName,
+        tasksUpdated: 0,
+        tasksInserted: 0,
+        tasksDeleted: 0,
+        totalTasks: 0,
+        datesFilled: 0,
+        error,
+        lockBusy: true,
+        durationMs: Date.now() - startTime,
+      };
+    }
+    lockHeld = true;
+  } catch (err) {
+    log(`Warning: could not check for another running sync (${errorMessage(err)}). Continuing.`);
+  }
+
+  try {
+    const result = await runSprintSync(sprintName, log, startTime);
+    if (result.success) {
+      try {
+        await recordSprintSync(sprintName, trigger, result.totalTasks);
+      } catch (err) {
+        log(`Warning: could not record the sync time: ${errorMessage(err)}`);
+      }
+    }
+    return result;
+  } finally {
+    if (lockHeld) {
+      await releaseSyncLock(holder).catch((err) =>
+        console.warn('[sync] Could not release the run lock:', errorMessage(err)),
+      );
+    }
+  }
+}
+
+/**
+ * The sync itself. Replace-per-sprint strategy: snapshot the sprint's
+ * existing rows, wipe the whole section, and re-add it fresh from Asana. This
+ * avoids the fragile per-task matching (by task-URL + sprint name) that drifted
+ * — and silently duplicated rows — whenever a sprint was renamed or a task link
+ * changed.
+ *
+ * `startTime` is when the whole run began (lock included), so the column-X
+ * time budget below still ends the run before the 60s route limit.
+ */
+async function runSprintSync(
+  sprintName: string,
+  log: LogFn,
+  startTime: number,
+): Promise<SyncResult> {
   const result: SyncResult = {
     success: false,
     sprintName,

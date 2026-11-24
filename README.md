@@ -45,7 +45,30 @@ GEMINI_API_KEY=<key>
 
 # Misc
 TIMEZONE=Etc/GMT+8                   # PST (UTC-8, no DST; the sign is inverted in Etc/ names) — Asana dates, report headers, burndown 'today'
+
+# Scheduled sync (recommended)
+CRON_SECRET=<random string>          # Vercel sends it on cron calls; other callers of /api/cron/* get 401
 ```
+
+## Asana → sheet sync
+
+The dashboards read the Google Sheet, which only changes when a sync runs:
+
+- **Scheduled (Vercel Cron, see `vercel.json`)** — every 3 hours the current sprint
+  (the one whose dates contain today, PST) is synced; every 6 hours the sprint
+  that just ended is synced too, for 7 days after its end date, so late
+  completions still count. Crons run on production deployments only.
+- **Manual** — the Sync page, for any sprint, any time.
+
+Both use the same sync and share a run lock, so a scheduled run and a manual click
+can't rewrite the sheet at the same time (the second one is told to retry). The
+lock and each sprint's last successful sync time live in a **Sync Log** tab the sync
+creates on first run. The burndown shows that date and time (and whether it was
+scheduled or manual) above the chart, and turns it amber once it's over 4 hours
+old, so a missed sync shows instead of looking like missing work.
+
+Only tasks that are members of the sprint project are synced. A subtask under a
+sprint task isn't synced unless it is also added to the sprint project itself.
 
 ### Gemini model selection
 

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { fetchSheetRows } from '@/lib/sheets';
+import { fetchSheetRows, getLastSync } from '@/lib/sheets';
 import { mapRowsToSprintRows } from '@/lib/row-mapper';
 import { computeBurndown } from '@/lib/burndown-engine';
 import { BurndownRequest, BurndownResponse } from '@/types/burndown';
@@ -28,8 +28,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    // Fetch and parse sheet data
-    const rawRows = await fetchSheetRows();
+    // Fetch and parse sheet data. Fresh rows (no 60s cache) so a sync that just
+    // finished shows on the next Generate; plus when this sprint was last synced.
+    const [rawRows, lastSync] = await Promise.all([
+      fetchSheetRows({ fresh: true }),
+      getLastSync(body.sprintId),
+    ]);
     const sprintRows = mapRowsToSprintRows(rawRows);
 
     // Filter to selected sprint
@@ -49,6 +53,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       sprintId: body.sprintId,
       ...result,
       computedAt: new Date().toISOString(),
+      lastSync,
     };
 
     return NextResponse.json(response);

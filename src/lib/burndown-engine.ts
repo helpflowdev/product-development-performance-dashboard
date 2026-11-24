@@ -204,7 +204,7 @@ export function computeBurndown(
   sprintRows: SprintRow[],
   allottedPoints: number,
   allRows: SprintRow[] = sprintRows
-): Omit<BurndownResponse, 'sprintId' | 'computedAt'> {
+): Omit<BurndownResponse, 'sprintId' | 'computedAt' | 'lastSync'> {
   if (sprintRows.length === 0) {
     throw new Error('No tasks found for this sprint');
   }

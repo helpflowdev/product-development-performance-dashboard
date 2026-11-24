@@ -49,11 +49,18 @@ function getWriteClient(): sheets_v4.Sheets {
  *
  * Includes in-process cache (60-second TTL) to avoid hitting the API quota
  * (60 reads/minute per project)
+ *
+ * `fresh: true` skips the cache read (the result still refreshes it). A sync
+ * only clears the cache of the server instance it ran on; other instances —
+ * including the one serving the burndown — keep their copy for up to the TTL,
+ * so a page that must show a just-finished sync asks for fresh rows.
  */
-export async function fetchSheetRows(): Promise<string[][]> {
+export async function fetchSheetRows(
+  { fresh = false }: { fresh?: boolean } = {},
+): Promise<string[][]> {
   // Check cache
   const now = Date.now();
-  if (cachedRows && lastFetchedAt && now - lastFetchedAt < CACHE_TTL_MS) {
+  if (!fresh && cachedRows && lastFetchedAt && now - lastFetchedAt < CACHE_TTL_MS) {
     console.log('[sheets] Returning cached rows');
     return cachedRows;
   }
@@ -304,4 +311,183 @@ export async function deleteSheetRows(rowNumbers: number[]): Promise<number> {
   });
 
   return ranges.length;
+}
+
+// ─── Sync Log tab: run lock + last successful sync per sprint ────────────────
+
+/**
+ * A small tab the sync keeps for itself, separate from the data tab:
+ *   Row 1  = headers.
+ *   Row 2  = the run lock: B2 = when it was taken (ISO, UTC), C2 = who holds it.
+ *   Row 3+ = one row per sprint: name, last successful sync (ISO, UTC), what
+ *            triggered it ("manual" / "scheduled"), task count.
+ *
+ * The lock exists because the sync deletes a sprint's rows and re-inserts them:
+ * two overlapping runs (a scheduled one plus a manual click) would
+ * delete by stale row numbers and duplicate or drop rows. The sync time feeds
+ * the burndown's "last synced" line so stale data is visible, not silent.
+ */
+const SYNC_LOG_SHEET = 'Sync Log';
+const SYNC_LOG = `'${SYNC_LOG_SHEET}'`;
+const SYNC_LOG_HEADER = ['Sprint', 'Last Synced (UTC)', 'Trigger', 'Tasks'];
+const SYNC_LOCK_LABEL = '(run lock)';
+const SYNC_LOG_FIRST_SPRINT_ROW = 3;
+
+let syncLogReady = false; // per server instance: skip the tab check once done
+
+function sleepMs(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Create the Sync Log tab (headers + lock label) if it doesn't exist yet. */
+async function ensureSyncLogSheet(sheets: sheets_v4.Sheets): Promise<void> {
+  if (syncLogReady) return;
+  const spreadsheetId = process.env.GOOGLE_SHEET_ID!;
+
+  const meta = await sheets.spreadsheets.get({
+    spreadsheetId,
+    fields: 'sheets.properties.title',
+  });
+  const exists = meta.data.sheets?.some((s) => s.properties?.title === SYNC_LOG_SHEET);
+
+  if (!exists) {
+    try {
+      await sheets.spreadsheets.batchUpdate({
+        spreadsheetId,
+        requestBody: { requests: [{ addSheet: { properties: { title: SYNC_LOG_SHEET } } }] },
+      });
+    } catch (err) {
+      // Another run created it a moment ago — fine.
+      if (!/already exists/i.test(String(err))) throw err;
+    }
+    // Write only the header and the lock label — never B2:C2, so creating the
+    // tab can't wipe a lock another run has just taken.
+    await sheets.spreadsheets.values.batchUpdate({
+      spreadsheetId,
+      requestBody: {
+        valueInputOption: 'RAW',
+        data: [
+          { range: `${SYNC_LOG}!A1:D1`, values: [SYNC_LOG_HEADER] },
+          { range: `${SYNC_LOG}!A2`, values: [[SYNC_LOCK_LABEL]] },
+        ],
+      },
+    });
+  }
+  syncLogReady = true;
+}
+
+async function readSyncLock(
+  sheets: sheets_v4.Sheets,
+): Promise<{ since: string; heldBy: string }> {
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: process.env.GOOGLE_SHEET_ID!,
+    range: `${SYNC_LOG}!B2:C2`,
+  });
+  const [since = '', heldBy = ''] = res.data.values?.[0] ?? [];
+  return { since: String(since), heldBy: String(heldBy) };
+}
+
+export type SyncLockResult =
+  | { acquired: true }
+  | { acquired: false; heldBy: string; since: string };
+
+/**
+ * Take the sync run lock. A lock older than `ttlMs` is treated as abandoned (a
+ * run killed by the platform timeout never releases it).
+ *
+ * Sheets has no compare-and-set, so this is write-then-confirm: two runs that
+ * both see the lock free both write it, the later write wins, and after a short
+ * pause each re-reads — only the run whose name is still there proceeds.
+ */
+export async function acquireSyncLock(holder: string, ttlMs: number): Promise<SyncLockResult> {
+  const sheets = getWriteClient();
+  await ensureSyncLogSheet(sheets);
+
+  const current = await readSyncLock(sheets);
+  // Blank/unparseable time → free. A slightly negative age (clock skew between
+  // server instances) still counts as held.
+  const age = Date.now() - Date.parse(current.since);
+  if (current.heldBy && !Number.isNaN(age) && age < ttlMs) {
+    return { acquired: false, ...current };
+  }
+
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: process.env.GOOGLE_SHEET_ID!,
+    range: `${SYNC_LOG}!B2:C2`,
+    valueInputOption: 'RAW',
+    requestBody: { values: [[new Date().toISOString(), holder]] },
+  });
+
+  await sleepMs(750);
+  const after = await readSyncLock(sheets);
+  if (after.heldBy !== holder) return { acquired: false, ...after };
+  return { acquired: true };
+}
+
+/** Release the run lock — only if this run still holds it. */
+export async function releaseSyncLock(holder: string): Promise<void> {
+  const sheets = getWriteClient();
+  const current = await readSyncLock(sheets);
+  if (current.heldBy !== holder) return;
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: process.env.GOOGLE_SHEET_ID!,
+    range: `${SYNC_LOG}!B2:C2`,
+    valueInputOption: 'RAW',
+    requestBody: { values: [['', '']] },
+  });
+}
+
+/** Record a successful sync of `sprintName` (upserts that sprint's row). */
+export async function recordSprintSync(
+  sprintName: string,
+  trigger: string,
+  totalTasks: number,
+): Promise<void> {
+  const sheets = getWriteClient();
+  await ensureSyncLogSheet(sheets);
+
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: process.env.GOOGLE_SHEET_ID!,
+    range: `${SYNC_LOG}!A${SYNC_LOG_FIRST_SPRINT_ROW}:A`,
+  });
+  const names = (res.data.values ?? []).map((r) => String(r[0] ?? '').trim());
+  const idx = names.indexOf(sprintName.trim());
+  const rowNumber = SYNC_LOG_FIRST_SPRINT_ROW + (idx >= 0 ? idx : names.length);
+
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: process.env.GOOGLE_SHEET_ID!,
+    range: `${SYNC_LOG}!A${rowNumber}:D${rowNumber}`,
+    valueInputOption: 'RAW',
+    requestBody: {
+      values: [[sprintName.trim(), new Date().toISOString(), trigger, String(totalTasks)]],
+    },
+  });
+}
+
+export interface LastSync {
+  at: string; // ISO, UTC
+  trigger: string; // "manual" | "scheduled"
+}
+
+/**
+ * When `sprintName` was last synced successfully and what triggered it, or null
+ * when no sync has been recorded yet or the Sync Log can't be read. Never
+ * throws — the burndown must still render if this lookup fails.
+ */
+export async function getLastSync(sprintName: string): Promise<LastSync | null> {
+  try {
+    const sheets = google.sheets({ version: 'v4', auth: getReadAuth() });
+    const res = await sheets.spreadsheets.values.get({
+      spreadsheetId: process.env.GOOGLE_SHEET_ID!,
+      range: `${SYNC_LOG}!A${SYNC_LOG_FIRST_SPRINT_ROW}:C`,
+    });
+    const target = sprintName.trim();
+    const row = (res.data.values ?? []).find((r) => String(r[0] ?? '').trim() === target);
+    const at = row?.[1] ? String(row[1]) : '';
+    if (!at || Number.isNaN(Date.parse(at))) return null;
+    return { at, trigger: String(row?.[2] ?? '') };
+  } catch (err) {
+    console.warn('[sheets] Could not read the Sync Log:', String(err));
+    return null;
+  }
 }
